@@ -1,0 +1,11 @@
+test check_scope_name
+	assert_eq(scope_name_for_command("check"), "check")
+
+test test_scope_name
+	assert_eq(scope_name_for_command("test"), "test")
+
+test fmt_scope_name
+	assert_eq(scope_name_for_command("fmt"), "fmt")
+
+test fmt_matches_check_scope
+	assert_eq(fileset_name_for_command("fmt"), fileset_name_for_command("check"))

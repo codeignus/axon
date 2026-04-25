@@ -1,0 +1,5 @@
+pub func resolve_check_target() String
+    return "check:project"
+
+pub func resolve_test_target() String
+    return "test:project"

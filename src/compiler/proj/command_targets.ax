@@ -1,0 +1,8 @@
+pub func run_command_name(name: String) String
+    return name
+
+pub func scope_name_for_command(name: String) String
+    return name
+
+pub func fileset_name_for_command(name: String) String
+    return "src-tests-plus-tests"
