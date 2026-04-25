@@ -3,5 +3,8 @@ pub func run_command_name(name: String) String
 	axon_trace_info(cmd)
 	return cmd
 
+pub func run_fmt_on_file(path: String) String
+	return format_axon_file(path)
+
 func main() void
 	print(compiler_version())
