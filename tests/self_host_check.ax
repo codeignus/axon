@@ -1,0 +1,15 @@
+import
+    compiler/proj
+
+test self_host_check_describe
+    assert_eq(proj.describe_project(), "project:axon bin:axon main:./src/main.ax")
+
+test self_host_check_discover
+    assert_eq(proj.discover_entry(), "./src/main.ax")
+
+test self_host_check_modules
+    assert_eq(proj.list_compiler_modules(), "compiler/entry,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/ir/ir,compiler/ir/lower,compiler/backend/driver,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge")
+
+test self_host_check_targets
+    assert_eq(proj.resolve_check_target(), "check:project")
+    assert_eq(proj.resolve_test_target(), "test:project")

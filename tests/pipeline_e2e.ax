@@ -1,8 +1,7 @@
 import
     compiler/proj
 
-test compiler_smoke
+test pipeline_e2e_check_full_path
     assert_eq(proj.describe_project(), "project:axon bin:axon main:./src/main.ax")
     assert_eq(proj.discover_entry(), "./src/main.ax")
     assert_eq(proj.resolve_check_target(), "check:project")
-    assert_eq(proj.resolve_test_target(), "test:project")
