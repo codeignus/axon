@@ -1,2 +1,7 @@
+pub func run_command_name(name: String) String
+	cmd := normalize_command_name(name)
+	axon_trace_info(cmd)
+	return cmd
+
 func main() void
 	print(compiler_version())

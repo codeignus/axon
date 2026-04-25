@@ -1,0 +1,20 @@
+import
+    compiler/proj
+
+test rust_cli_normalizes_check
+    assert_eq(normalize_command_name("check"), "check")
+
+test cli_dispatches_check
+    assert_eq(proj.run_command_name("check"), "check")
+
+test cli_dispatches_test
+    assert_eq(proj.run_command_name("test"), "test")
+
+test cli_dispatches_fmt
+    assert_eq(proj.run_command_name("fmt"), "fmt")
+
+test cli_dispatches_mcp
+    assert_eq(proj.run_command_name("mcp"), "mcp")
+
+test cli_dispatches_unknown_falls_back
+    assert_eq(proj.run_command_name("unknown"), "unknown")
