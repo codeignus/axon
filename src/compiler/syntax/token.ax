@@ -1,0 +1,125 @@
+pub func TOKEN_IDENT() String
+    return "ident"
+
+pub func TOKEN_INT() String
+    return "int"
+
+pub func TOKEN_FLOAT() String
+    return "float"
+
+pub func TOKEN_STRING() String
+    return "string"
+
+pub func TOKEN_BOOL() String
+    return "bool"
+
+pub func TOKEN_CHAR() String
+    return "char"
+
+pub func TOKEN_COLON() String
+    return "colon"
+
+pub func TOKEN_COLON_EQ() String
+    return "colon_eq"
+
+pub func TOKEN_DOT() String
+    return "dot"
+
+pub func TOKEN_DOT_DOT() String
+    return "dot_dot"
+
+pub func TOKEN_COMMA() String
+    return "comma"
+
+pub func TOKEN_ARROW() String
+    return "arrow"
+
+pub func TOKEN_ASSIGN() String
+    return "assign"
+
+pub func TOKEN_EQ() String
+    return "eq"
+
+pub func TOKEN_NE() String
+    return "ne"
+
+pub func TOKEN_LT() String
+    return "lt"
+
+pub func TOKEN_GT() String
+    return "gt"
+
+pub func TOKEN_LE() String
+    return "le"
+
+pub func TOKEN_GE() String
+    return "ge"
+
+pub func TOKEN_PLUS() String
+    return "plus"
+
+pub func TOKEN_MINUS() String
+    return "minus"
+
+pub func TOKEN_STAR() String
+    return "star"
+
+pub func TOKEN_SLASH() String
+    return "slash"
+
+pub func TOKEN_PERCENT() String
+    return "percent"
+
+pub func TOKEN_AMP() String
+    return "amp"
+
+pub func TOKEN_PIPE() String
+    return "pipe"
+
+pub func TOKEN_BANG() String
+    return "bang"
+
+pub func TOKEN_QUESTION() String
+    return "question"
+
+pub func TOKEN_LPAREN() String
+    return "lparen"
+
+pub func TOKEN_RPAREN() String
+    return "rparen"
+
+pub func TOKEN_LBRACK() String
+    return "lbrack"
+
+pub func TOKEN_RBRACK() String
+    return "rbrack"
+
+pub func TOKEN_LBRACE() String
+    return "lbrace"
+
+pub func TOKEN_RBRACE() String
+    return "rbrace"
+
+pub func TOKEN_AT() String
+    return "at"
+
+pub func TOKEN_INDENT() String
+    return "indent"
+
+pub func TOKEN_DEDENT() String
+    return "dedent"
+
+pub func TOKEN_NEWLINE() String
+    return "newline"
+
+pub func TOKEN_COMMENT() String
+    return "comment"
+
+pub func TOKEN_EOF() String
+    return "eof"
+
+pub func TOKEN_ERROR() String
+    return "error"
+
+pub func token_kind_name(kind: String) String
+    return kind

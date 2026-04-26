@@ -1,0 +1,2 @@
+pub func describe_link_step() String
+    return "native link"

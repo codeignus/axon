@@ -1,0 +1,5 @@
+pub func handle_check_tool(input: String) String
+    return axon_fail("check tool handling")
+
+pub func handle_docs_tool(input: String) String
+    return axon_fail("docs tool handling")

@@ -1,0 +1,5 @@
+pub func describe_ir_node(kind: String) String
+    return kind
+
+pub func ir_node_count() u32
+    return 8

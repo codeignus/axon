@@ -1,0 +1,5 @@
+pub func list_resources() String
+    return "docs/architecture,docs/bootstrap,docs/status"
+
+pub func read_resource(uri: String) String
+    return axon_fail("mcp resource reading")

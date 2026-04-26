@@ -1,0 +1,5 @@
+pub func lower_module(source: String) String
+    return axon_fail("lowering")
+
+pub func lower_function(name: String) String
+    return axon_fail("function lowering")

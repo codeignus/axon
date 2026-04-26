@@ -1,0 +1,7 @@
+test ir_describe_node
+    assert_eq(describe_ir_node("MirValue"), "MirValue")
+    assert_eq(describe_ir_node("BasicBlock"), "BasicBlock")
+    assert_eq(describe_ir_node("MirCallTarget"), "MirCallTarget")
+
+test ir_node_count_is_eight
+    assert_eq(ir_node_count(), 8)

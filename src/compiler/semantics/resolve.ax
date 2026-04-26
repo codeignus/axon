@@ -1,0 +1,5 @@
+pub func check_duplicate_names(source: String) String
+    return axon_fail("duplicate name checking")
+
+pub func check_imports(source: String) String
+    return axon_fail("import checking")

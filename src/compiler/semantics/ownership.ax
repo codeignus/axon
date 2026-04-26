@@ -1,0 +1,5 @@
+pub func analyze_ownership(source: String) String
+    return axon_fail("ownership analysis")
+
+pub func check_last_use(source: String) String
+    return axon_fail("last-use checking")

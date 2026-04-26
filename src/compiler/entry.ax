@@ -1,0 +1,2 @@
+pub func compiler_version() String
+    return "0.1.0"

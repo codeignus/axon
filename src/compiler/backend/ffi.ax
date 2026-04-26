@@ -1,0 +1,5 @@
+pub func describe_ffi_boundary() String
+    return axon_fail("FFI boundary description")
+
+pub func describe_export_marker() String
+    return axon_fail("export marker description")

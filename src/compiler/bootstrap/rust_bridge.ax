@@ -1,0 +1,5 @@
+pub func compile_rust_sidecar(source: String) String
+    return axon_fail("Rust sidecar compilation")
+
+pub func link_rust_archive(path: String) String
+    return axon_fail("Rust archive linking")

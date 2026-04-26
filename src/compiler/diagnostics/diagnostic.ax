@@ -1,0 +1,8 @@
+pub func report_error(msg: String) void
+    print(msg)
+
+pub func error_with_code(msg: String) void
+    print(msg)
+
+pub func fail_not_implemented(area: String) String
+    return axon_fail(area)

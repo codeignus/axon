@@ -1,0 +1,5 @@
+pub func compile_module(ir: String) String
+    return axon_fail("compilation")
+
+pub func link_binary(objects: String) String
+    return axon_fail("linking")

@@ -1,0 +1,2 @@
+pub func describe_project() String
+    return "project:axon bin:axon main:./src/main.ax"

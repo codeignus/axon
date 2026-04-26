@@ -1,0 +1,5 @@
+pub func check_types(source: String) String
+    return axon_fail("type checking")
+
+pub func check_type_compatibility(left: String, right: String) String
+    return axon_fail("type compatibility checking")

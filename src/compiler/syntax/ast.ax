@@ -1,0 +1,77 @@
+pub func NODE_FUNC_DECL() String
+    return "func_decl"
+
+pub func NODE_IMPORT_DECL() String
+    return "import_decl"
+
+pub func NODE_STRUCT_DECL() String
+    return "struct_decl"
+
+pub func NODE_ENUM_DECL() String
+    return "enum_decl"
+
+pub func NODE_TRAIT_DECL() String
+    return "trait_decl"
+
+pub func NODE_ERROR_DECL() String
+    return "error_decl"
+
+pub func NODE_TYPE_ALIAS() String
+    return "type_alias"
+
+pub func NODE_TEST_DECL() String
+    return "test_decl"
+
+pub func NODE_CALL_EXPR() String
+    return "call_expr"
+
+pub func NODE_BINARY_EXPR() String
+    return "binary_expr"
+
+pub func NODE_UNARY_EXPR() String
+    return "unary_expr"
+
+pub func NODE_IDENT_EXPR() String
+    return "ident_expr"
+
+pub func NODE_INT_EXPR() String
+    return "int_expr"
+
+pub func NODE_FLOAT_EXPR() String
+    return "float_expr"
+
+pub func NODE_STRING_EXPR() String
+    return "string_expr"
+
+pub func NODE_BOOL_EXPR() String
+    return "bool_expr"
+
+pub func NODE_CHAR_EXPR() String
+    return "char_expr"
+
+pub func NODE_NIL_EXPR() String
+    return "nil_expr"
+
+pub func NODE_BLOCK() String
+    return "block"
+
+pub func NODE_BINDING_STMT() String
+    return "binding_stmt"
+
+pub func NODE_RETURN_STMT() String
+    return "return_stmt"
+
+pub func NODE_IF_STMT() String
+    return "if_stmt"
+
+pub func NODE_FOR_STMT() String
+    return "for_stmt"
+
+pub func NODE_WHILE_STMT() String
+    return "while_stmt"
+
+pub func NODE_MATCH_STMT() String
+    return "match_stmt"
+
+pub func node_kind_name(kind: String) String
+    return kind

@@ -1,0 +1,8 @@
+pub func target_dir() String
+    return "target"
+
+pub func build_dir() String
+    return "target/build"
+
+pub func cache_dir() String
+    return "target/cache"

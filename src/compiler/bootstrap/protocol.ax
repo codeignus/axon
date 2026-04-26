@@ -1,0 +1,5 @@
+pub func bootstrap_version() String
+    return "0.1.0"
+
+pub func describe_bridge() String
+    return "rust static archive bridge"
