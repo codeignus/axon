@@ -1,10 +1,41 @@
-pub func run_command_name(name: String) String
-	cmd := normalize_command_name(name)
-	axon_trace_info(cmd)
-	return cmd
+import
+    clap
+
+pub func run_check(path: String) String
+    return axon_fail("not implemented: check")
+
+pub func run_build(path: String) String
+    return axon_fail("not implemented: build")
+
+pub func run_run(path: String) String
+    return axon_fail("not implemented: run")
+
+pub func run_test(path: String) String
+    return axon_fail("not implemented: test")
 
 pub func run_fmt_on_file(path: String) String
-	return format_axon_file(path)
+    return format_axon_file(path)
+
+pub func run_fmt(path: String) String
+    return run_fmt_on_file(path)
+
+pub func run_unknown_command() String
+    return axon_fail("unknown command")
 
 func main() void
-	print(compiler_version())
+    cli := parse_cli()
+    cmd := cli.command()
+    if cmd == "check"
+        run_check(cli.target())
+    elif cmd == "build"
+        run_build(cli.target())
+    elif cmd == "run"
+        run_run(cli.target())
+    elif cmd == "test"
+        run_test(cli.target())
+    elif cmd == "fmt"
+        run_fmt(cli.target())
+    elif cmd == "mcp"
+        axon_fail("not implemented: mcp")
+    else
+        run_unknown_command()

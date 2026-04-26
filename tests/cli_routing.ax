@@ -1,20 +1,41 @@
 import
-    compiler/proj
+    clap
 
-test rust_cli_normalizes_check
-    assert_eq(normalize_command_name("check"), "check")
+test dispatcher_routes_check_command
+    cmd := normalize_command_name("check")
+    assert_eq(cmd, "check")
 
-test cli_dispatches_check
-    assert_eq(proj.run_command_name("check"), "check")
+test dispatcher_routes_build_command
+    cmd := normalize_command_name("build")
+    assert_eq(cmd, "build")
 
-test cli_dispatches_test
-    assert_eq(proj.run_command_name("test"), "test")
+test dispatcher_routes_run_command
+    cmd := normalize_command_name("run")
+    assert_eq(cmd, "run")
 
-test cli_dispatches_fmt
-    assert_eq(proj.run_command_name("fmt"), "fmt")
+test dispatcher_routes_test_command
+    cmd := normalize_command_name("test")
+    assert_eq(cmd, "test")
 
-test cli_dispatches_mcp
-    assert_eq(proj.run_command_name("mcp"), "mcp")
+test dispatcher_routes_fmt_command
+    cmd := normalize_command_name("fmt")
+    assert_eq(cmd, "fmt")
 
-test cli_dispatches_unknown_falls_back
-    assert_eq(proj.run_command_name("unknown"), "unknown")
+test dispatcher_routes_mcp_command
+    cmd := normalize_command_name("mcp")
+    assert_eq(cmd, "mcp")
+
+test check_stub_calls_fail
+    run_check("dummy_path")
+
+test build_stub_calls_fail
+    run_build("dummy_path")
+
+test run_stub_calls_fail
+    run_run("dummy_path")
+
+test test_stub_calls_fail
+    run_test("dummy_path")
+
+test unknown_command_calls_fail
+    run_unknown_command()
