@@ -1,2 +1,33 @@
+import
+    compiler/proj
+    compiler/backend
+    compiler/bootstrap
+    compiler/diagnostics
+
+pub func check(path: String) String
+    scope := proj.resolve_check_target(path)
+    bridge := bootstrap.check_bridge_readiness()
+    if bridge != "ok":
+        return bridge
+    ffi_result := backend.validate_ffi_surface()
+    if ffi_result != "ok":
+        return ffi_result
+    link_result := backend.validate_link_readiness()
+    if link_result != "ok":
+        return link_result
+    return "ok"
+
+pub func build() String
+    checked := check("")
+    if checked != "ok":
+        return checked
+    return backend.emit_project_artifacts()
+
+pub func run() String
+    built := build()
+    if built != "ok":
+        return built
+    return backend.launch_project_binary()
+
 pub func compiler_version() String
     return "0.1.0"
