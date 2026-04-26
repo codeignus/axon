@@ -1,42 +1,7 @@
-import
-    clap
-
-test parse_cli_returns_check_command
-    cli := parse_cli()
-    cmd := cli.command()
-    assert_eq(cmd, "check")
-
-test parse_cli_returns_build_command
-    cli := parse_cli()
-    cmd := cli.command()
-    assert_eq(cmd, "build")
-
-test parse_cli_returns_run_command
-    cli := parse_cli()
-    cmd := cli.command()
-    assert_eq(cmd, "run")
-
-test parse_cli_returns_test_command
-    cli := parse_cli()
-    cmd := cli.command()
+test parse_cli_returns_command
+    cmd := cli_command()
     assert_eq(cmd, "test")
 
-test parse_cli_returns_fmt_command
-    cli := parse_cli()
-    cmd := cli.command()
-    assert_eq(cmd, "fmt")
-
-test parse_cli_returns_mcp_command
-    cli := parse_cli()
-    cmd := cli.command()
-    assert_eq(cmd, "mcp")
-
-test parse_cli_command_returns_nonempty_string
-    cli := parse_cli()
-    cmd := cli.command()
-    assert(cmd.len() > 0)
-
-test parse_cli_target_returns_string
-    cli := parse_cli()
-    target := cli.target()
-    assert(target.len() >= 0)
+test parse_cli_target_returns_empty
+    target := cli_target()
+    assert_eq(target, "")

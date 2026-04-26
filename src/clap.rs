@@ -9,6 +9,7 @@ struct Cli {
     command: Command,
 }
 
+#[derive(clap::Subcommand)]
 enum Command {
     Check { target: String },
     Build,

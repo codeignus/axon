@@ -8,7 +8,7 @@ test discover_entry_returns_main_path
     assert_eq(discover_entry(), "./src/main.ax")
 
 test resolve_check_target_returns_project_scope
-    assert_eq(resolve_check_target(), "check:project")
+    assert_eq(resolve_check_target(""), "project")
 
 test resolve_test_target_returns_project_scope
-    assert_eq(resolve_test_target(), "test:project")
+    assert_eq(resolve_test_target(""), "test:project")

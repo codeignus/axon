@@ -4,5 +4,5 @@ import
 test compiler_smoke
     assert_eq(proj.describe_project(), "project:axon bin:axon main:./src/main.ax")
     assert_eq(proj.discover_entry(), "./src/main.ax")
-    assert_eq(proj.resolve_check_target(), "check:project")
-    assert_eq(proj.resolve_test_target(), "test:project")
+    assert_eq(proj.resolve_check_target(""), "project")
+    assert_eq(proj.resolve_test_target(""), "test:project")
