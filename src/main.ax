@@ -1,6 +1,3 @@
-import
-    clap
-
 pub func run_check(path: String) String
     return axon_fail("not implemented: check")
 
@@ -25,18 +22,18 @@ pub func run_unknown_command() String
 func main() void
     logger := init_tracing()
     logger.info("axon compiler starting")
-    cli := parse_cli()
-    cmd := cli.command()
+    cmd := cli_command()
+    target := cli_target()
     if cmd == "check"
-        run_check(cli.target())
+        run_check(target)
     elif cmd == "build"
-        run_build(cli.target())
+        run_build(target)
     elif cmd == "run"
-        run_run(cli.target())
+        run_run(target)
     elif cmd == "test"
-        run_test(cli.target())
+        run_test(target)
     elif cmd == "fmt"
-        run_fmt(cli.target())
+        run_fmt(target)
     elif cmd == "mcp"
         axon_fail("not implemented: mcp")
     else
