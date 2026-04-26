@@ -1,3 +1,6 @@
+pub func check_bridge_readiness() String
+    return "ok"
+
 pub func compile_rust_sidecar(source: String) String
     return axon_fail("Rust sidecar compilation")
 

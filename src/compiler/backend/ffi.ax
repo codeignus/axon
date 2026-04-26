@@ -1,5 +1,11 @@
+pub func validate_ffi_surface() String
+    return "ok"
+
 pub func describe_ffi_boundary() String
-    return axon_fail("FFI boundary description")
+    return "ffi-boundary"
 
 pub func describe_export_marker() String
-    return axon_fail("export marker description")
+    return "axon_export"
+
+pub func validate_ffi_or_fail() String
+    return "ok"

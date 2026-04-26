@@ -1,5 +1,14 @@
+pub func ensure_buildable() String
+    return validate_link_readiness()
+
 pub func compile_module(ir: String) String
     return axon_fail("compilation")
 
 pub func link_binary(objects: String) String
     return axon_fail("linking")
+
+pub func emit_project_artifacts() String
+    return axon_fail("artifact emission")
+
+pub func launch_project_binary() String
+    return axon_fail("binary execution")
