@@ -5,10 +5,10 @@ test check_stub_calls_fail
     axon.run_check("dummy_path")
 
 test build_stub_calls_fail
-    axon.run_build("dummy_path")
+    axon.run_build()
 
 test run_stub_calls_fail
-    axon.run_run("dummy_path")
+    axon.run_run()
 
 test test_stub_calls_fail
     axon.run_test("dummy_path")
