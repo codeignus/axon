@@ -7,3 +7,4 @@ bin axon
 rust_deps
     tracing = "0.1"
     tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+    clap = { version = "4", features = ["derive"] }

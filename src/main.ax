@@ -22,18 +22,18 @@ pub func run_unknown_command() String
 func main() void
     logger := init_tracing()
     logger.info("axon compiler starting")
+    
     cmd := cli_command()
-    target := cli_target()
     if cmd == "check"
-        run_check(target)
+        run_check(cli_target())
     elif cmd == "build"
-        run_build(target)
+        run_build("")
     elif cmd == "run"
-        run_run(target)
+        run_run("")
     elif cmd == "test"
-        run_test(target)
+        run_test(cli_target())
     elif cmd == "fmt"
-        run_fmt(target)
+        run_fmt(cli_target())
     elif cmd == "mcp"
         axon_fail("not implemented: mcp")
     else
