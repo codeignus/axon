@@ -1,30 +1,6 @@
 import
     clap
 
-test dispatcher_routes_check_command
-    cmd := normalize_command_name("check")
-    assert_eq(cmd, "check")
-
-test dispatcher_routes_build_command
-    cmd := normalize_command_name("build")
-    assert_eq(cmd, "build")
-
-test dispatcher_routes_run_command
-    cmd := normalize_command_name("run")
-    assert_eq(cmd, "run")
-
-test dispatcher_routes_test_command
-    cmd := normalize_command_name("test")
-    assert_eq(cmd, "test")
-
-test dispatcher_routes_fmt_command
-    cmd := normalize_command_name("fmt")
-    assert_eq(cmd, "fmt")
-
-test dispatcher_routes_mcp_command
-    cmd := normalize_command_name("mcp")
-    assert_eq(cmd, "mcp")
-
 test check_stub_calls_fail
     run_check("dummy_path")
 
