@@ -23,6 +23,8 @@ pub func run_unknown_command() String
     return axon_fail("unknown command")
 
 func main() void
+    logger := init_tracing()
+    logger.info("axon compiler starting")
     cli := parse_cli()
     cmd := cli.command()
     if cmd == "check"

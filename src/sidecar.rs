@@ -1,43 +1,32 @@
-use clap::Command;
 use std::sync::Once;
 use tracing::info;
 
 static INIT: Once = Once::new();
 
-fn init_tracing() {
+fn init_tracing_subscriber() {
     INIT.call_once(|| {
         let _ = tracing_subscriber::fmt().without_time().try_init();
     });
 }
 
+pub struct Tracer;
+
+impl Tracer {
+    pub fn info(&self, msg: String) {
+        init_tracing_subscriber();
+        info!("{msg}");
+    }
+}
+
 #[axon_export]
-fn compiler_version() -> String {
-    "0.1.0".to_string()
+fn init_tracing() -> Tracer {
+    init_tracing_subscriber();
+    Tracer
 }
 
 #[axon_export]
 fn axon_fail(msg: &str) -> String {
     panic!("axon-lang: {msg}")
-}
-
-#[axon_export]
-fn normalize_command_name(name: &str) -> String {
-    let app = Command::new("axon")
-        .subcommand(Command::new("check"))
-        .subcommand(Command::new("test"))
-        .subcommand(Command::new("fmt"))
-        .subcommand(Command::new("mcp"));
-    let matches = app
-        .try_get_matches_from(["axon", name])
-        .unwrap_or_else(|_| panic!("axon-lang: unknown command {name}"));
-    matches.subcommand_name().unwrap().to_string()
-}
-
-#[axon_export]
-fn axon_trace_info(msg: &str) -> String {
-    init_tracing();
-    info!("{msg}");
-    msg.to_string()
 }
 
 fn format_axon_source(input: &str) -> String {
@@ -75,7 +64,8 @@ fn format_source_for_test(input: &str) -> String {
 
 #[axon_export]
 fn format_axon_file(path: &str) -> String {
-    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("axon-lang: read {path}: {e}"));
+    let src =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("axon-lang: read {path}: {e}"));
     let formatted = format_axon_source(&src);
     std::fs::write(path, formatted).unwrap_or_else(|e| panic!("axon-lang: write {path}: {e}"));
     path.to_string()
