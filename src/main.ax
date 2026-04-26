@@ -1,10 +1,10 @@
 pub func run_check(path: String) String
     return axon_fail("not implemented: check")
 
-pub func run_build(path: String) String
+pub func run_build() String
     return axon_fail("not implemented: build")
 
-pub func run_run(path: String) String
+pub func run_run() String
     return axon_fail("not implemented: run")
 
 pub func run_test(path: String) String
@@ -24,17 +24,17 @@ func main() void
     logger.info("axon compiler starting")
     
     cmd := cli_command()
-    if cmd == "check":
+    if cmd == "check"
         run_check(cli_target())
-    elif cmd == "build":
-        run_build("")
-    elif cmd == "run":
-        run_run("")
-    elif cmd == "test":
+    elif cmd == "build"
+        run_build()
+    elif cmd == "run"
+        run_run()
+    elif cmd == "test"
         run_test(cli_target())
-    elif cmd == "fmt":
+    elif cmd == "fmt"
         run_fmt(cli_target())
-    elif cmd == "mcp":
+    elif cmd == "mcp"
         axon_fail("not implemented: mcp")
-    else:
+    else
         run_unknown_command()
