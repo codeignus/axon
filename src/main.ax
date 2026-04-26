@@ -1,26 +1,5 @@
 import
-    compiler
-
-pub func run_check(path: String) String
-    return compiler.check(path)
-
-pub func run_build() String
-    return compiler.build()
-
-pub func run_run() String
-    return compiler.run()
-
-pub func run_test(path: String) String
-    return axon_fail("not implemented: test")
-
-pub func run_fmt_on_file(path: String) String
-    return format_axon_file(path)
-
-pub func run_fmt(path: String) String
-    return run_fmt_on_file(path)
-
-pub func run_unknown_command() String
-    return axon_fail("unknown command")
+    compiler { check, build, run }
 
 func main() void
     logger := init_tracing()
@@ -28,16 +7,16 @@ func main() void
     
     cmd := cli_command()
     if cmd == "check":
-        run_check(cli_target())
+        check(cli_target())
     elif cmd == "build":
-        run_build()
+        build()
     elif cmd == "run":
-        run_run()
+        run()
     elif cmd == "test":
-        run_test(cli_target())
+        axon_fail("not implemented: test")
     elif cmd == "fmt":
-        run_fmt(cli_target())
+        format_axon_file(cli_target())
     elif cmd == "mcp":
         axon_fail("not implemented: mcp")
     else:
-        run_unknown_command()
+        axon_fail("unknown command")

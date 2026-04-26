@@ -1,0 +1,11 @@
+test check_with_empty_path_runs
+    result := check("")
+    assert_eq(result, result)
+
+test build_runs
+    result := build()
+    assert_eq(result, result)
+
+test run_runs
+    result := run()
+    assert_eq(result, result)

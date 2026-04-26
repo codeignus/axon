@@ -28,6 +28,3 @@ pub func run() String
     if built != "ok":
         return built
     return backend.launch_project_binary()
-
-pub func compiler_version() String
-    return "0.1.0"

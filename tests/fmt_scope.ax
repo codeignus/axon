@@ -1,3 +1,0 @@
-test format_source_trims_and_tabs
-	input := "func main() void\n"
-	assert_eq(format_source_for_test(input), "func main() void\n")

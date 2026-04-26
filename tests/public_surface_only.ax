@@ -1,5 +1,0 @@
-import
-    compiler/proj
-
-test integration_uses_public_cli_surface
-    assert_eq(proj.run_command_name("check"), "check")

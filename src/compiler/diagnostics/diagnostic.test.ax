@@ -1,0 +1,5 @@
+test compiler_error_shapes_failure
+    assert_eq(compiler_error("syntax", "bad token"), "error: syntax: bad token")
+
+test internal_compiler_error_shape
+    assert_eq(internal_compiler_error("unexpected"), "error: internal compiler failure: unexpected")
