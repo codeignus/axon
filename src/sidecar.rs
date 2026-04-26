@@ -1,29 +1,3 @@
-use std::sync::Once;
-use tracing::info;
-
-static INIT: Once = Once::new();
-
-fn init_tracing_subscriber() {
-    INIT.call_once(|| {
-        let _ = tracing_subscriber::fmt().without_time().try_init();
-    });
-}
-
-pub struct Tracer;
-
-impl Tracer {
-    pub fn info(&self, msg: String) {
-        init_tracing_subscriber();
-        info!("{msg}");
-    }
-}
-
-#[axon_export]
-fn init_tracing() -> Tracer {
-    init_tracing_subscriber();
-    Tracer
-}
-
 #[axon_export]
 fn axon_fail(msg: &str) -> String {
     panic!("axon-lang: {msg}")
