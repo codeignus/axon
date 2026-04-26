@@ -1,3 +1,15 @@
+@rust
+#[axon_export]
+fn fmt_compiler_error(kind: &str, msg: &str) -> String {
+    format!("error: {}: {}", kind, msg)
+}
+
+#[axon_export]
+fn fmt_internal_compiler_error(msg: &str) -> String {
+    format!("error: internal compiler failure: {}", msg)
+}
+@end
+
 pub func report_error(msg: String) void
     print(msg)
 
@@ -6,3 +18,9 @@ pub func error_with_code(msg: String) void
 
 pub func fail_not_implemented(area: String) String
     return axon_fail(area)
+
+pub func compiler_error(kind: String, msg: String) String
+    return fmt_compiler_error(kind, msg)
+
+pub func internal_compiler_error(msg: String) String
+    return fmt_internal_compiler_error(msg)
