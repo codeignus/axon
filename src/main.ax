@@ -1,14 +1,11 @@
-import
-    compiler
-
 pub func run_check(path: String) String
-    return compiler.check(path)
+    return axon_fail("not implemented: check")
 
-pub func run_build() String
-    return compiler.build()
+pub func run_build(path: String) String
+    return axon_fail("not implemented: build")
 
-pub func run_run() String
-    return compiler.run()
+pub func run_run(path: String) String
+    return axon_fail("not implemented: run")
 
 pub func run_test(path: String) String
     return axon_fail("not implemented: test")
@@ -25,13 +22,14 @@ pub func run_unknown_command() String
 func main() void
     logger := init_tracing()
     logger.info("axon compiler starting")
+    
     cmd := cli_command()
     if cmd == "check":
         run_check(cli_target())
     elif cmd == "build":
-        run_build()
+        run_build("")
     elif cmd == "run":
-        run_run()
+        run_run("")
     elif cmd == "test":
         run_test(cli_target())
     elif cmd == "fmt":

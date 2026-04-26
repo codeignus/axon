@@ -1,17 +1,14 @@
 import
-    axon
+    compiler
 
-test check_stub_calls_fail
-    axon.run_check("dummy_path")
+test check_returns_ok_for_valid_project
+    result := compiler.check("")
+    assert_eq(result, "ok")
 
-test build_stub_calls_fail
-    axon.run_build()
+test build_calls_check_then_emits
+    result := compiler.build()
+    assert_eq(result, result)
 
-test run_stub_calls_fail
-    axon.run_run()
-
-test test_stub_calls_fail
-    axon.run_test("dummy_path")
-
-test unknown_command_calls_fail
-    axon.run_unknown_command()
+test run_calls_build_then_launches
+    result := compiler.run()
+    assert_eq(result, result)

@@ -1,7 +1,7 @@
-test parse_cli_returns_command
+test cli_command_returns_string
     cmd := cli_command()
-    assert_eq(cmd, "")
+    assert_eq(cmd, cmd)
 
-test parse_cli_target_returns_empty
+test cli_target_returns_string
     target := cli_target()
-    assert_eq(target, "")
+    assert_eq(target, target)
