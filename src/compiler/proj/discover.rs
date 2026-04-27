@@ -154,3 +154,29 @@ fn string_from_char(code: i64) -> String {
         String::new()
     }
 }
+
+#[axon_export]
+fn string_starts_with(s: &str, prefix: &str) -> bool {
+    s.starts_with(prefix)
+}
+
+#[axon_export]
+fn string_ends_with(s: &str, suffix: &str) -> bool {
+    s.ends_with(suffix)
+}
+
+#[axon_export]
+fn string_contains(haystack: &str, needle: &str) -> bool {
+    haystack.contains(needle)
+}
+
+#[axon_export]
+fn string_sub(s: &str, start: i64, len: i64) -> String {
+    let start = start as usize;
+    let len = len as usize;
+    if start >= s.len() {
+        return String::new();
+    }
+    let end = (start + len).min(s.len());
+    s[start..end].to_string()
+}

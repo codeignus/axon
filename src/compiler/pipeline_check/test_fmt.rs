@@ -1,6 +1,20 @@
 #[axon_export]
 fn run_project_tests(target: &str) -> String {
-    let scope = classify_test_target_impl(target);
+    let scope = if target.is_empty() {
+        "test:project".to_string()
+    } else if target == "." {
+        "dir:.".to_string()
+    } else if target == "./..." {
+        "dir-recursive:./".to_string()
+    } else if target == "..." {
+        "dir-recursive:.".to_string()
+    } else if target.ends_with("/...") {
+        format!("dir-recursive:{}", &target[..target.len() - 4])
+    } else if target.ends_with(".ax") {
+        format!("file:{}", target)
+    } else {
+        format!("dir:{}", target)
+    };
     let root_path = if target.is_empty() {
         project_entry_root_path()
     } else {

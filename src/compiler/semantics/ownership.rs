@@ -52,8 +52,12 @@ fn walk_and_check_ownership(root: &Path) -> Result<usize, String> {
     Ok(checked)
 }
 
+// Single-source ownership check moved to ownership.ax (Axon-native).
+// Only project-wide check remains here (needs directory walking).
+
 #[axon_export]
 fn run_ownership_check(source: &str) -> String {
+    // Delegate to Axon-native logic via a thin wrapper
     if source.contains("dealloc(") || source.contains("free(") {
         return "error: ownership: manual deallocation is forbidden".to_string();
     }

@@ -1,7 +1,17 @@
-// Ownership semantics wrappers route through bridge-backed checks until
-// the Axon-native ownership engine fully replaces sidecar logic.
+import
+    compiler/proj/discover { string_starts_with, string_contains }
+
 pub func analyze_ownership(source: String) String
     return run_ownership_check(source)
 
 pub func check_last_use(source: String) String
     return run_ownership_check(source)
+
+pub func run_ownership_check(source: String) String
+    if string_contains(source, "dealloc(") or string_contains(source, "free("):
+        return "error: ownership: manual deallocation is forbidden"
+    if string_contains(source, "condition_scope_consume("):
+        return "error: ownership: manual condition consume is forbidden"
+    if string_contains(source, "condition_scope_begin("):
+        return "error: ownership: manual condition scope begin is forbidden"
+    return "ok:ownership-snippet"
