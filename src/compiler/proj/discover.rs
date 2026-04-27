@@ -118,3 +118,39 @@ fn read_source_file(path: &str) -> String {
         Err(e) => format!("error: discover: cannot read {path}: {e}"),
     }
 }
+
+#[axon_export]
+fn string_char_at(s: &str, index: i64) -> String {
+    let bytes = s.as_bytes();
+    let i = index as usize;
+    if i >= bytes.len() {
+        return String::new();
+    }
+    let b = bytes[i];
+    if b.is_ascii() {
+        (b as char).to_string()
+    } else {
+        let ch = s.chars().nth(i).unwrap_or('\0');
+        ch.to_string()
+    }
+}
+
+#[axon_export]
+fn string_byte_at(s: &str, index: i64) -> i64 {
+    let bytes = s.as_bytes();
+    let i = index as usize;
+    if i >= bytes.len() {
+        -1
+    } else {
+        bytes[i] as i64
+    }
+}
+
+#[axon_export]
+fn string_from_char(code: i64) -> String {
+    if let Some(ch) = char::from_u32(code as u32) {
+        ch.to_string()
+    } else {
+        String::new()
+    }
+}
