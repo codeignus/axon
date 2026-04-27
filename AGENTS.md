@@ -25,8 +25,6 @@ CWD must be `rust-backed-compiler-for-axon/` so the host compiler finds `../src/
 
 ## Axon Codegen Limitations
 - No `while`/`for` loops — use recursion
-- Axon functions calling other Axon functions in same module fails for non-void returns. Use foreign (`axon_*`) calls directly
-- Self-recursive functions that also call other Axon functions fail. Keep recursive functions self-contained using only foreign calls
 - `->` is not valid Axon return type syntax. Use `func name() Type` not `func name() -> Type`
 
 ## Principles
