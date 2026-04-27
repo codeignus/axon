@@ -1,2 +1,2 @@
-pub func discover_entry() String
-    return "./src/main.ax"
+func _discover_rust_moved() void
+    return

@@ -1,2 +1,2 @@
-pub func run_semantic_check(source: String) String
-    return axon_fail("semantic checking")
+func _semantics_rust_moved() void
+    return

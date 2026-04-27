@@ -11,13 +11,23 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Command {
-    Check { target: String },
+    Check { target: Option<String> },
     Build,
     Run,
     Test { target: String },
     Fmt { target: String },
     Mcp,
 }
+
+// TODO(self-host ownership/typecheck milestone):
+// Collapse `cli_command` + `cli_target` into one export that returns
+// a tuple shaped like Axon `(String, Option[String])`.
+//
+// Why deferred:
+// - This requires complete Option/tuple typing in the Axon compiler pipeline.
+// - The future self-hosted typechecker should validate real struct/Option types
+//   instead of relying on parser-level name heuristics.
+// - Once that is stable, this split API can be replaced by a single typed return.
 
 #[axon_export]
 fn cli_command() -> String {
@@ -36,11 +46,9 @@ fn cli_command() -> String {
 fn cli_target() -> String {
     let args = Cli::parse();
     match args.command {
-        Command::Check { target } => target,
+        Command::Check { target } => target.unwrap_or_default(),
         Command::Test { target } => target,
         Command::Fmt { target } => target,
-        Command::Build | Command::Run | Command::Mcp => {
-            panic!("axon-lang: target requested for command without target")
-        }
+        Command::Build | Command::Run | Command::Mcp => "".to_string(),
     }
 }

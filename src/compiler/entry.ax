@@ -1,30 +1,26 @@
 import
-    compiler/proj
-    compiler/backend
-    compiler/bootstrap
-    compiler/diagnostics
+    compiler/pipeline_check { run_check_for_path }
 
 pub func check(path: String) String
-    scope := proj.resolve_check_target(path)
-    bridge := bootstrap.check_bridge_readiness()
-    if bridge != "ok":
-        return bridge
-    ffi_result := backend.validate_ffi_surface()
-    if ffi_result != "ok":
-        return ffi_result
-    link_result := backend.validate_link_readiness()
-    if link_result != "ok":
-        return link_result
-    return "ok"
+    return run_check_for_path(path)
 
 pub func build() String
-    checked := check("")
-    if checked != "ok":
-        return checked
-    return backend.emit_project_artifacts()
+    pre := run_check_for_path("")
+    if pre != "ok":
+        return pre
+    lowered := lower_project("")
+    if message_is_error(lowered) == "yes":
+        return lowered
+    return run_lowered_to_artifact(lowered)
 
 pub func run() String
-    built := build()
+    pre := run_check_for_path("")
+    if pre != "ok":
+        return pre
+    lowered := lower_project("")
+    if message_is_error(lowered) == "yes":
+        return lowered
+    built := run_lowered_to_artifact(lowered)
     if built != "ok":
         return built
-    return backend.launch_project_binary()
+    return launch_self_built()

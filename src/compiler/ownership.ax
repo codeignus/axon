@@ -1,0 +1,34 @@
+// Ownership model sketch for the self-hosted Axon compiler.
+// This is intentionally lightweight and serves as executable documentation.
+//
+// Direction:
+// 1) FFI String returns should transfer ownership to Axon as ptr+len.
+// 2) Conditional expressions should NOT free at compare time.
+// 3) Once a branch is selected, that branch scope is responsible for
+//    releasing condition-owned temporaries exactly once.
+// 4) Values that escape conditional scope (especially `mut` bindings like
+//    `mut x` declared outside and reassigned inside branches) must preserve
+//    canonical ownership across the merge point. Branch-local temporaries may
+//    be consumed in-branch, but escaping owners/pointers are resolved at the
+//    post-branch merge using reverse-use data.
+// 5) Users never call dealloc/consume manually. The compiler/runtime owns
+//    this policy:
+//      - treat branch entry like function-param ownership routing
+//      - use reverse-use to decide canonical owner vs pointer
+//      - if a value has no remaining owner/use path, free at lexical-scope end
+//        (single free, no user action).
+//
+// These hooks are no-ops today and mark where runtime ownership actions
+// will be implemented when ptr+len transfer and branch cleanup are wired.
+
+pub func ffi_string_transfer_contract() String
+    return "ffi:string:transfer rust->axon ptr+len; free at canonical owner"
+
+pub func condition_scope_begin(owner: String) String
+    // Future: register `owner` as branch-condition owner.
+    return owner
+
+pub func condition_scope_consume(scope: String, branch: String) void
+    // Future: release condition-owned values once branch is entered.
+    // This is where `cmd`/condition temporaries should be freed once.
+    return

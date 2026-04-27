@@ -1,0 +1,23 @@
+import
+    compiler/proj
+    compiler/bootstrap
+    compiler/backend
+
+pub func run_check_for_path(path: String) String
+    scope := proj.resolve_check_target(path)
+    bridge := bootstrap.check_bridge_readiness()
+    if bridge != "ok":
+        return bridge
+    ffi_result := backend.validate_ffi_surface()
+    if ffi_result != "ok":
+        return ffi_result
+    link_result := backend.validate_link_readiness()
+    if link_result != "ok":
+        return link_result
+    lexed := run_lex_check(path)
+    if message_is_error(lexed) == "yes":
+        return lexed
+    parsed := run_parse_check(path)
+    if message_is_error(parsed) == "yes":
+        return parsed
+    return "ok"

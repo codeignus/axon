@@ -2,7 +2,7 @@ test describe_project_returns_manifest_info
     assert_eq(describe_project(), "project:axon bin:axon main:./src/main.ax")
 
 test list_compiler_modules_returns_layout
-    assert_eq(list_compiler_modules(), "compiler/entry,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/ir/ir,compiler/ir/lower,compiler/backend/driver,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge")
+    assert_eq(list_compiler_modules(), "compiler/entry,compiler/pipeline_check,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/ir/ir,compiler/ir/lower,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge")
 
 test discover_entry_returns_main_path
     assert_eq(discover_entry(), "./src/main.ax")

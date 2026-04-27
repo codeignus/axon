@@ -1,2 +1,2 @@
-pub func describe_parse(source: String) String
-    return axon_fail("parsing")
+func _parser_rust_moved() void
+    return

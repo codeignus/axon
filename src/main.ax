@@ -1,22 +1,26 @@
-import
-    compiler { check, build, run }
-
 func main() void
-    logger := init_tracing()
-    logger.info("axon compiler starting")
-    
+    // logger := init_tracing()
+    // logger.info("axon compiler starting")
+
     cmd := cli_command()
     if cmd == "check":
-        check(cli_target())
+        // check(cli_target())
+        print("check (stub)")
     elif cmd == "build":
-        build()
+        // build()
+        print("build (stub)")
     elif cmd == "run":
-        run()
+        // run()
+        print("run (stub)")
     elif cmd == "test":
-        axon_fail("not implemented: test")
+        // axon_fail("not implemented: test")
+        print("test (stub)")
     elif cmd == "fmt":
-        format_axon_file(cli_target())
+        // format_axon_file(cli_target())
+        print("fmt (stub)")
     elif cmd == "mcp":
-        axon_fail("not implemented: mcp")
+        // axon_fail("not implemented: mcp")
+        print("mcp (stub)")
     else:
-        axon_fail("unknown command")
+        // axon_fail("unknown command")
+        print("unknown command (stub)")

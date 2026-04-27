@@ -3,3 +3,6 @@ pub func describe_link_step() String
 
 pub func validate_link_readiness() String
     return validate_native_toolchain()
+
+pub func ensure_buildable() String
+    return validate_link_readiness()
