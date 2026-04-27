@@ -1,3 +1,4 @@
+// Smoke-level command orchestration tests: assert pipeline executes without panic.
 test check_with_empty_path_runs
     result := check("")
     assert_eq(result, result)
@@ -9,3 +10,19 @@ test build_runs
 test run_runs
     result := run()
     assert_eq(result, result)
+
+test self_bootstrap_gate_runs
+    result := self_bootstrap_gate()
+    assert_eq(result, result)
+
+test test_entrypoint_runs
+    result := run_project_tests("")
+    assert_eq(result, result)
+
+test fmt_entrypoint_runs
+    result := run_fmt_target("")
+    assert_eq(result, result)
+
+test mcp_entrypoint_runs
+    result := mcp_status()
+    assert_eq(result, "ok:mcp:available")

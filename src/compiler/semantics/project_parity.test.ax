@@ -1,0 +1,5 @@
+test semantic_project_check_runs
+    // Use an isolated fixture project so semantic project-check assertions
+    // are deterministic and independent from compiler self-host sources.
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_typecheck_valid/src")
+    assert_eq(message_is_error(got), "no")

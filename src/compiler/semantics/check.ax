@@ -1,2 +1,6 @@
-func _semantics_rust_moved() void
-    return
+// Semantic check wrappers keep callsites stable while implementation evolves.
+pub func run_semantic_check_for_source(source: String) String
+    return run_semantic_check(source)
+
+pub func run_semantic_check_for_project(path: String) String
+    return run_semantic_project_check(path)

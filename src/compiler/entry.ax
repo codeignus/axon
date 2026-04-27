@@ -1,26 +1,48 @@
 import
     compiler/pipeline_check { run_check_for_path }
 
+// Public command-layer orchestration used by tests and higher-level entrypoints.
 pub func check(path: String) String
     return run_check_for_path(path)
 
 pub func build() String
+    // Stage attribution is preserved here so callers always get a clear failure source.
     pre := run_check_for_path("")
-    if pre != "ok":
-        return pre
+    if message_is_error(pre) == "yes":
+        return diag_error("check", pre)
     lowered := lower_project("")
     if message_is_error(lowered) == "yes":
-        return lowered
-    return run_lowered_to_artifact(lowered)
+        return diag_error("lower", lowered)
+    built := run_lowered_to_artifact(lowered)
+    if message_is_error(built) == "yes":
+        return diag_error("artifact", built)
+    return "ok"
 
 pub func run() String
+    // run() never bypasses build checks; it only launches after a successful artifact stage.
     pre := run_check_for_path("")
-    if pre != "ok":
-        return pre
+    if message_is_error(pre) == "yes":
+        return diag_error("check", pre)
     lowered := lower_project("")
     if message_is_error(lowered) == "yes":
-        return lowered
+        return diag_error("lower", lowered)
     built := run_lowered_to_artifact(lowered)
-    if built != "ok":
-        return built
-    return launch_self_built()
+    if message_is_error(built) == "yes":
+        return diag_error("artifact", built)
+    launched := launch_self_built()
+    if message_is_error(launched) == "yes":
+        return diag_error("launch", launched)
+    return "ok"
+
+pub func self_bootstrap_gate() String
+    // Two explicit cycles keep this runnable with current Axon codegen limits.
+    first := build()
+    if message_is_error(first) == "yes":
+        return diag_error("bootstrap-cycle-1", first)
+    second := build()
+    if message_is_error(second) == "yes":
+        return diag_error("bootstrap-cycle-2", second)
+    checked := check("")
+    if message_is_error(checked) == "yes":
+        return diag_error("bootstrap-check", checked)
+    return "ok"

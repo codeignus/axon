@@ -1,5 +1,7 @@
+// Ownership semantics wrappers route through bridge-backed checks until
+// the Axon-native ownership engine fully replaces sidecar logic.
 pub func analyze_ownership(source: String) String
-    return axon_fail("ownership analysis")
+    return run_ownership_check(source)
 
 pub func check_last_use(source: String) String
-    return axon_fail("last-use checking")
+    return run_ownership_check(source)

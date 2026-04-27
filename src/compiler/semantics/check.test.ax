@@ -1,0 +1,20 @@
+// Fixture parity tests for semantic duplicate-name diagnostics.
+test semantic_snippet_rejects_duplicate_function
+    source := "func hello() String\n    return \"a\"\n\nfunc hello() String\n    return \"b\"\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "yes")
+
+test semantic_snippet_accepts_distinct_functions
+    source := "func hello() String\n    return \"a\"\n\nfunc world() String\n    return \"b\"\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "no")
+
+test semantic_snippet_rejects_unresolved_call
+    source := "func hello() String\n    unknown_fn()\n    return \"a\"\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "yes")
+
+test semantic_snippet_rejects_arity_mismatch
+    source := "func add(a: Int, b: Int) Int\n    return 1\n\nfunc main() Int\n    add(1)\n    return 0\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "yes")

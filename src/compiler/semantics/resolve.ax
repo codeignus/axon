@@ -1,5 +1,7 @@
+// Resolver-facing API currently delegates to shared semantic snippet checks.
+// Keeping this wrapper allows resolver-specific diagnostics to be added later.
 pub func check_duplicate_names(source: String) String
-    return axon_fail("duplicate name checking")
+    return run_semantic_check(source)
 
 pub func check_imports(source: String) String
-    return axon_fail("import checking")
+    return run_semantic_check(source)

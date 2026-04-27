@@ -1,0 +1,12 @@
+// Ownership contract tests: user code must not perform manual memory release.
+test ownership_snippet_flags_manual_free
+    got := analyze_ownership("free(x)")
+    assert_eq(message_is_error(got), "yes")
+
+test ownership_snippet_accepts_regular_assignment
+    got := analyze_ownership("x := y")
+    assert_eq(message_is_error(got), "no")
+
+test ownership_snippet_flags_condition_scope_begin
+    got := analyze_ownership("condition_scope_begin(cmd)")
+    assert_eq(message_is_error(got), "yes")

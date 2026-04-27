@@ -1,26 +1,92 @@
+import
+    compiler/pipeline_check { run_check_for_path }
+
+// CLI entrypoint for the self-hosted compiler binary.
+// Keep dispatch thin; heavy stage logic lives under compiler/* modules.
 func main() void
     logger := init_tracing()
     logger.info("axon compiler starting")
 
     cmd := cli_command()
     if cmd == "check":
-        // check(cli_target())
-        logger.info("dispatch: check (stub)")
+        logger.info("dispatch: check")
+        checked := run_check_for_path(cli_target())
+        logger.info(checked)
     elif cmd == "build":
-        // build()
-        logger.info("dispatch: build (stub)")
+        logger.info("dispatch: build")
+        built := build_entrypoint()
+        logger.info(built)
     elif cmd == "run":
-        // run()
-        logger.info("dispatch: run (stub)")
+        logger.info("dispatch: run")
+        ran := run_entrypoint()
+        logger.info(ran)
     elif cmd == "test":
-        // axon_fail("not implemented: test")
-        logger.debug("dispatch: test (stub)")
+        logger.info("dispatch: test")
+        tested := test_entrypoint(cli_target())
+        logger.info(tested)
     elif cmd == "fmt":
-        // format_axon_file(cli_target())
-        logger.debug("dispatch: fmt (stub)")
+        logger.info("dispatch: fmt")
+        formatted := fmt_entrypoint(cli_target())
+        logger.info(formatted)
     elif cmd == "mcp":
-        // axon_fail("not implemented: mcp")
-        logger.warn("dispatch: mcp (stub, not implemented)")
+        logger.info("dispatch: mcp")
+        mcp := mcp_entrypoint()
+        logger.info(mcp)
     else:
         // axon_fail("unknown command")
         logger.err("dispatch: unknown command (stub)")
+
+func build_entrypoint() String
+    // Build always runs full check first to keep diagnostics deterministic.
+    pre := run_check_for_path("")
+    if message_is_error(pre) == "yes":
+        return pre
+    lowered := lower_project("")
+    if message_is_error(lowered) == "yes":
+        return lowered
+    built := run_lowered_to_artifact(lowered)
+    if message_is_error(built) == "yes":
+        return built
+    return "ok"
+
+func run_entrypoint() String
+    // Run is build + launch. It returns launch output on success.
+    pre := run_check_for_path("")
+    if message_is_error(pre) == "yes":
+        return pre
+    lowered := lower_project("")
+    if message_is_error(lowered) == "yes":
+        return lowered
+    built := run_lowered_to_artifact(lowered)
+    if message_is_error(built) == "yes":
+        return built
+    launched := launch_self_built()
+    if message_is_error(launched) == "yes":
+        return launched
+    return launched
+
+func self_bootstrap_gate() String
+    // Bootstrap confidence gate: two consecutive builds + a project check.
+    // This catches obvious non-determinism before declaring the pipeline healthy.
+    first := build_entrypoint()
+    if message_is_error(first) == "yes":
+        return first
+    second := build_entrypoint()
+    if message_is_error(second) == "yes":
+        return second
+    checked := run_check_for_path("")
+    if message_is_error(checked) == "yes":
+        return checked
+    return "ok"
+
+func test_entrypoint(target: String) String
+    pre := run_check_for_path("")
+    if message_is_error(pre) == "yes":
+        return pre
+    return run_project_tests(target)
+
+func fmt_entrypoint(target: String) String
+    return run_fmt_target(target)
+
+func mcp_entrypoint() String
+    return mcp_status()

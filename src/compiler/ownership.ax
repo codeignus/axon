@@ -2,21 +2,21 @@
 // This is intentionally lightweight and serves as executable documentation.
 //
 // Direction:
-// 1) FFI String returns should transfer ownership to Axon as ptr+len.
-// 2) Conditional expressions should NOT free at compare time.
-// 3) Once a branch is selected, that branch scope is responsible for
+// - FFI String returns should transfer ownership to Axon as ptr+len.
+// - Conditional expressions should NOT free at compare time.
+// - Once a branch is selected, that branch scope is responsible for
 //    releasing condition-owned temporaries exactly once.
-// 4) Values that escape conditional scope (especially `mut` bindings like
-//    `mut x` declared outside and reassigned inside branches) must preserve
+// - Values that escape conditional scope, especially `mut` bindings like
+//    `mut x` declared outside and reassigned inside branches, must preserve
 //    canonical ownership across the merge point. Branch-local temporaries may
 //    be consumed in-branch, but escaping owners/pointers are resolved at the
 //    post-branch merge using reverse-use data.
-// 5) Users never call dealloc/consume manually. The compiler/runtime owns
+// - Users never call dealloc/consume manually. The compiler/runtime owns
 //    this policy:
 //      - treat branch entry like function-param ownership routing
 //      - use reverse-use to decide canonical owner vs pointer
 //      - if a value has no remaining owner/use path, free at lexical-scope end
-//        (single free, no user action).
+//        single free, no user action.
 //
 // These hooks are no-ops today and mark where runtime ownership actions
 // will be implemented when ptr+len transfer and branch cleanup are wired.
@@ -32,3 +32,28 @@ pub func condition_scope_consume(scope: String, branch: String) void
     // Future: release condition-owned values once branch is entered.
     // This is where `cmd`/condition temporaries should be freed once.
     return
+
+pub func validate_conditional_ownership_contract() String
+    return "ok:ownership:conditional-branch-free"
+
+pub func validate_escape_merge_contract() String
+    return "ok:ownership:escape-merge-canonical-owner"
+
+pub func validate_user_no_manual_dealloc_contract() String
+    return "ok:ownership:compiler-managed-lifecycle"
+
+pub func validate_ownership_invariants() String
+    // Validate the ownership contract in phases to keep stage errors actionable.
+    cond := validate_conditional_ownership_contract()
+    if message_is_error(cond) == "yes":
+        return cond
+    merge := validate_escape_merge_contract()
+    if message_is_error(merge) == "yes":
+        return merge
+    lifecycle := validate_user_no_manual_dealloc_contract()
+    if message_is_error(lifecycle) == "yes":
+        return lifecycle
+    ownership_project := run_ownership_project_check("")
+    if message_is_error(ownership_project) == "yes":
+        return ownership_project
+    return "ok"

@@ -1,23 +1,33 @@
 import
-    compiler/proj
-    compiler/bootstrap
     compiler/backend
+    compiler/bootstrap
+    compiler { validate_ownership_invariants }
 
+// check pipeline contract:
+// bridge/toolchain readiness -> ffi/link checks -> lex/parse/semantic -> ownership.
 pub func run_check_for_path(path: String) String
-    scope := proj.resolve_check_target(path)
+    scope := classify_check_target(path)
+    if scope == "":
+        return diag_error("check", "empty check scope")
     bridge := bootstrap.check_bridge_readiness()
-    if bridge != "ok":
-        return bridge
+    if message_is_error(bridge) == "yes":
+        return diag_error("bridge", bridge)
     ffi_result := backend.validate_ffi_surface()
-    if ffi_result != "ok":
-        return ffi_result
+    if message_is_error(ffi_result) == "yes":
+        return diag_error("ffi", ffi_result)
     link_result := backend.validate_link_readiness()
-    if link_result != "ok":
-        return link_result
+    if message_is_error(link_result) == "yes":
+        return diag_error("link", link_result)
     lexed := run_lex_check(path)
     if message_is_error(lexed) == "yes":
-        return lexed
+        return diag_error("lex", lexed)
     parsed := run_parse_check(path)
     if message_is_error(parsed) == "yes":
-        return parsed
+        return diag_error("parse", parsed)
+    semantics := run_semantic_project_check(path)
+    if message_is_error(semantics) == "yes":
+        return diag_error("semantics", semantics)
+    own := validate_ownership_invariants()
+    if message_is_error(own) == "yes":
+        return diag_error("ownership", own)
     return "ok"

@@ -1,5 +1,11 @@
+// Type checks reuse semantic snippet validation for now.
+// The split shape keeps a stable API for future typed IR rules.
 pub func check_types(source: String) String
-    return axon_fail("type checking")
+    return run_semantic_check(source)
 
 pub func check_type_compatibility(left: String, right: String) String
-    return axon_fail("type compatibility checking")
+    // Evaluate left first so we can return the earliest deterministic failure.
+    left_check := run_semantic_check(left)
+    if message_is_error(left_check) == "yes":
+        return left_check
+    return run_semantic_check(right)
