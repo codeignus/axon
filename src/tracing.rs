@@ -20,7 +20,8 @@ impl Tracer {
         info!("{msg}");
     }
 
-    pub fn error(&self, msg: String) {
+    // `error` is an Axon keyword, so the export is `err`.
+    pub fn err(&self, msg: String) {
         error!("{msg}");
     }
 

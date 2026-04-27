@@ -1,26 +1,26 @@
 func main() void
-    // logger := init_tracing()
-    // logger.info("axon compiler starting")
+    logger := init_tracing()
+    logger.info("axon compiler starting")
 
     cmd := cli_command()
     if cmd == "check":
         // check(cli_target())
-        print("check (stub)")
+        logger.info("dispatch: check (stub)")
     elif cmd == "build":
         // build()
-        print("build (stub)")
+        logger.info("dispatch: build (stub)")
     elif cmd == "run":
         // run()
-        print("run (stub)")
+        logger.info("dispatch: run (stub)")
     elif cmd == "test":
         // axon_fail("not implemented: test")
-        print("test (stub)")
+        logger.debug("dispatch: test (stub)")
     elif cmd == "fmt":
         // format_axon_file(cli_target())
-        print("fmt (stub)")
+        logger.debug("dispatch: fmt (stub)")
     elif cmd == "mcp":
         // axon_fail("not implemented: mcp")
-        print("mcp (stub)")
+        logger.warn("dispatch: mcp (stub, not implemented)")
     else:
         // axon_fail("unknown command")
-        print("unknown command (stub)")
+        logger.err("dispatch: unknown command (stub)")
