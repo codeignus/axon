@@ -180,3 +180,41 @@ fn string_sub(s: &str, start: i64, len: i64) -> String {
     let end = (start + len).min(s.len());
     s[start..end].to_string()
 }
+
+#[axon_export]
+fn string_split(haystack: &str, needle: &str) -> String {
+    let parts: Vec<&str> = haystack.split(needle).collect();
+    let mut out = String::new();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            out.push('\x1f');
+        }
+        out.push_str(part);
+    }
+    out
+}
+
+#[axon_export]
+fn string_count(haystack: &str, needle: &str) -> i64 {
+    haystack.matches(needle).count() as i64
+}
+
+#[axon_export]
+fn string_trim(s: &str) -> String {
+    s.trim().to_string()
+}
+
+#[axon_export]
+fn string_eq(a: &str, b: &str) -> bool {
+    a == b
+}
+
+#[axon_export]
+fn path_exists(path: &str) -> bool {
+    std::path::Path::new(path).exists()
+}
+
+#[axon_export]
+fn path_is_dir(path: &str) -> bool {
+    std::path::Path::new(path).is_dir()
+}

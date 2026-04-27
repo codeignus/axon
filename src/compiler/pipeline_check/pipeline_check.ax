@@ -1,6 +1,7 @@
 import
     compiler/backend
     compiler/bootstrap
+    compiler/syntax { run_parse_check }
     compiler { validate_ownership_invariants }
 
 // check pipeline contract:
