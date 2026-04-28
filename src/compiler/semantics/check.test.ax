@@ -18,3 +18,8 @@ test semantic_snippet_rejects_arity_mismatch
     source := "func add(a: Int, b: Int) Int\n    return 1\n\nfunc main() Int\n    add(1)\n    return 0\n"
     got := run_semantic_check_for_source(source)
     assert_eq(message_is_error(got), "yes")
+
+test semantic_snippet_accepts_len_method_with_complex_type_helpers
+    source := "func string_len(s: String) Int\n    return 1\n\nfunc main() Int\n    \"hi\".len()\n    return 0\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "no")

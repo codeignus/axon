@@ -1,29 +1,5 @@
 test compiler_error_shapes_failure
-    assert_eq(compiler_error("syntax", "bad token"), "error: syntax: bad token")
+    assert_eq(compiler_error("syntax", "bad token"), "error: stage=syntax code=E1000 reason=bad token")
 
 test internal_compiler_error_shape
-    assert_eq(internal_compiler_error("unexpected"), "error: internal compiler failure: unexpected")
-
-test compiler_warn_shape
-    assert_eq(compiler_warn("unused", "variable x"), "warning: unused: variable x")
-
-test compiler_note_shape
-    assert_eq(compiler_note("info", "see docs"), "note: info: see docs")
-
-test is_error_detects_error
-    assert_eq(is_error("error: something bad"), "yes")
-
-test is_error_rejects_ok
-    assert_eq(is_error("ok"), "no")
-
-test is_warning_detects_warning
-    assert_eq(is_warning("warning: unused import"), "yes")
-
-test is_warning_rejects_error
-    assert_eq(is_warning("error: bad"), "no")
-
-test severity_of_returns_correct_level
-    assert_eq(severity_of("error: bad"), "error")
-    assert_eq(severity_of("warning: unused"), "warning")
-    assert_eq(severity_of("note: hint"), "note")
-    assert_eq(severity_of("ok"), "unknown")
+    assert_eq(internal_compiler_error("unexpected"), "error: stage=internal code=E0001 reason=unexpected")

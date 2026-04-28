@@ -39,7 +39,7 @@ fn describe_tokenization(source: &str) -> String {
     format!("tokens:{}", lex_token_count(source))
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn run_lex_check(root: &str) -> String {
     let root_path = if root.is_empty() {
         project_entry_root_path()

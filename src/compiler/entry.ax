@@ -1,4 +1,7 @@
 import
+    compiler/backend { run_lowered_to_artifact, launch_self_built }
+    compiler/diagnostics { diag_error, message_is_error }
+    compiler/ir { lower_project }
     compiler/pipeline_check { run_check_for_path }
 
 // Public command-layer orchestration used by tests and higher-level entrypoints.

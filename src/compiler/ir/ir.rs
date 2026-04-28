@@ -8,7 +8,7 @@ fn lower_function(name: &str) -> String {
     format!("ir:function:{name}")
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn lower_project(root: &str) -> String {
     let root_path = if root.is_empty() {
         project_entry_root_path()

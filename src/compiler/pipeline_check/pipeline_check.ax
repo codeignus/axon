@@ -1,7 +1,12 @@
 import
     compiler/backend
     compiler/bootstrap
-    compiler/syntax { run_parse_check }
+    compiler/proj { classify_check_target }
+    compiler/syntax/lexer { run_lex_check }
+    compiler/syntax/parser { run_parse_check }
+    compiler/semantics/check { run_semantic_project_check }
+    compiler/diagnostics/diagnostic { compiler_error }
+    compiler/diagnostics/diagnostics { message_is_error, diag_error }
     compiler { validate_ownership_invariants }
 
 // check pipeline contract:

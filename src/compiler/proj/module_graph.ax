@@ -1,2 +1,2 @@
 pub func list_compiler_modules() String
-    return "compiler/entry,compiler/pipeline_check,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/ir/ir,compiler/ir/lower,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge"
+    return "compiler/entry,compiler/pipeline_check,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/complex_types/string,compiler/complex_types/array,compiler/ir/ir,compiler/ir/lower,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge"

@@ -1,3 +1,6 @@
+import
+    compiler/diagnostics { message_is_error }
+
 // Ownership model sketch for the self-hosted Axon compiler.
 // This is intentionally lightweight and serves as executable documentation.
 //

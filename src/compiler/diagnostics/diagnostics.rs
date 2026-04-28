@@ -65,7 +65,7 @@ fn diag_render_all() -> String {
 // cross-module as foreign functions (main.ax, pipeline_check.ax, entry.ax).
 // Formatting functions (diag_error, diag_warn, etc.) are now in diagnostic.ax.
 
-#[axon_export]
+#[axon_pub_export]
 fn message_is_error(s: &str) -> String {
     if !s.is_empty() && s.starts_with("error:") {
         "yes".to_string()
@@ -96,22 +96,22 @@ fn message_severity(s: &str) -> String {
     }
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn diag_error(kind: &str, msg: &str) -> String {
-    format!("error: {}: {}", kind, msg)
+    format!("error: stage={} code=E1000 reason={}", kind, msg)
 }
 
 #[axon_export]
 fn diag_warn(kind: &str, msg: &str) -> String {
-    format!("warning: {}: {}", kind, msg)
+    format!("warning: stage={} code=W1000 reason={}", kind, msg)
 }
 
 #[axon_export]
 fn diag_note(kind: &str, msg: &str) -> String {
-    format!("note: {}: {}", kind, msg)
+    format!("note: stage={} code=N1000 reason={}", kind, msg)
 }
 
 #[axon_export]
 fn diag_internal(msg: &str) -> String {
-    format!("error: internal compiler failure: {}", msg)
+    format!("error: stage=internal code=E0001 reason={}", msg)
 }

@@ -1,4 +1,9 @@
 import
+    compiler/ir { lower_project }
+    compiler/backend { run_lowered_to_artifact, launch_self_built }
+    compiler/diagnostics { message_is_error }
+    compiler/pipeline_check { run_project_tests, run_fmt_target }
+    mcp { mcp_status }
     compiler/pipeline_check { run_check_for_path }
 
 // CLI entrypoint for the self-hosted compiler binary.

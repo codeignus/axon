@@ -1,34 +1,5 @@
-import
-    compiler/proj/discover { string_ends_with, string_sub, string_starts_with }
-
 pub func resolve_check_target(path: String) String
-    if path == "":
-        return "project"
-    if path == ".":
-        return "dir:."
-    if path == "./...":
-        return "dir-recursive:./"
-    if path == "...":
-        return "dir-recursive:."
-    n := len(path)
-    if string_ends_with(path, "/..."):
-        return "dir-recursive:" + string_sub(path, 0, n - 4)
-    if string_ends_with(path, ".ax"):
-        return "file:" + path
-    return "dir:" + path
+    return classify_check_target(path)
 
 pub func resolve_test_target(path: String) String
-    if path == "":
-        return "test:project"
-    if path == ".":
-        return "dir:."
-    if path == "./...":
-        return "dir-recursive:./"
-    if path == "...":
-        return "dir-recursive:."
-    n := len(path)
-    if string_ends_with(path, "/..."):
-        return "dir-recursive:" + string_sub(path, 0, n - 4)
-    if string_ends_with(path, ".ax"):
-        return "file:" + path
-    return "dir:" + path
+    return classify_test_target(path)

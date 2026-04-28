@@ -1,8 +1,25 @@
-#[axon_export]
-fn describe_parse(source: &str) -> String {
+fn describe_parse_impl(source: &str) -> String {
     let mut stack: Vec<char> = Vec::new();
-    for ch in source.chars() {
+    let chars: Vec<char> = source.chars().collect();
+    let mut i = 0usize;
+    let mut in_string = false;
+    while i < chars.len() {
+        let ch = chars[i];
+        if in_string {
+            if ch == '\\' {
+                i += 2;
+                continue;
+            }
+            if ch == '"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
         match ch {
+            '"' => {
+                in_string = true;
+            }
             '(' | '[' | '{' => stack.push(ch),
             ')' => {
                 if stack.pop() != Some('(') {
@@ -21,10 +38,65 @@ fn describe_parse(source: &str) -> String {
             }
             _ => {}
         }
+        i += 1;
     }
     if stack.is_empty() {
         "ok".to_string()
     } else {
         "error: parser: unclosed delimiter".to_string()
+    }
+}
+
+#[axon_export]
+fn describe_parse(source: &str) -> String {
+    describe_parse_impl(source)
+}
+
+fn parse_file(path: &std::path::Path) -> Result<(), String> {
+    let src = std::fs::read_to_string(path)
+        .map_err(|e| format!("error: parser: cannot read {}: {e}", path.display()))?;
+    let got = describe_parse_impl(&src);
+    if got.starts_with("error:") {
+        Err(format!("error: parser: {}: {}", path.display(), got))
+    } else {
+        Ok(())
+    }
+}
+
+fn walk_and_parse(root: &std::path::Path) -> Result<usize, String> {
+    let mut checked = 0usize;
+    let entries = std::fs::read_dir(root)
+        .map_err(|e| format!("error: parser: cannot read {}: {e}", root.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|e| format!("error: parser: bad dir entry: {e}"))?
+            .path();
+        if path.is_dir() {
+            checked += walk_and_parse(&path)?;
+            continue;
+        }
+        if path.extension().and_then(|e| e.to_str()) != Some("ax") {
+            continue;
+        }
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if name.ends_with(".test.ax") {
+            continue;
+        }
+        parse_file(&path)?;
+        checked += 1;
+    }
+    Ok(checked)
+}
+
+#[axon_pub_export]
+fn run_parse_check(root: &str) -> String {
+    let root_path = if root.is_empty() {
+        std::path::PathBuf::from("src")
+    } else {
+        std::path::PathBuf::from(root)
+    };
+    match walk_and_parse(&root_path) {
+        Ok(count) => format!("ok:parsed:{count}"),
+        Err(err) => err,
     }
 }

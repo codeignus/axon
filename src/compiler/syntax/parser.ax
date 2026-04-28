@@ -1,59 +1,7 @@
-func parse_balance(source: String) String
-    n := len(source)
-    stack := ""
-    i := 0
-    while i < n
-        ch := string_byte_at(source, i)
-        if ch == 40 or ch == 91 or ch == 123
-            stack = stack + string_from_char(ch)
-        else if ch == 41
-            if len(stack) == 0
-                return "error: parser: mismatched ')'"
-            last := string_byte_at(stack, len(stack) - 1)
-            stack = string_sub(stack, 0, len(stack) - 1)
-            if last != 40
-                return "error: parser: mismatched ')'"
-        else if ch == 93
-            if len(stack) == 0
-                return "error: parser: mismatched ']'"
-            last := string_byte_at(stack, len(stack) - 1)
-            stack = string_sub(stack, 0, len(stack) - 1)
-            if last != 91
-                return "error: parser: mismatched ']'"
-        else if ch == 125
-            if len(stack) == 0
-                return "error: parser: mismatched '}'"
-            last := string_byte_at(stack, len(stack) - 1)
-            stack = string_sub(stack, 0, len(stack) - 1)
-            if last != 123
-                return "error: parser: mismatched '}'"
-        i = i + 1
-    if len(stack) != 0
-        return "error: parser: unclosed delimiter"
-    return "ok"
-
-pub func run_parse_check(root: String) String
-    files := list_ax_files(root)
-    if string_starts_with(files, "error:")
-        return files
-    return parse_all_files(files, 0)
-
-func parse_all_files(files: String, pos: i64) String
-    n := len(files)
-    if pos >= n
+// Native parser helpers (incremental port). Keep sidecar checks for now.
+pub func parse_balance_native(source: String) String
+    opens := axon_string_count(source, "(") + axon_string_count(source, "[") + axon_string_count(source, "{")
+    closes := axon_string_count(source, ")") + axon_string_count(source, "]") + axon_string_count(source, "}")
+    if opens == closes:
         return "ok"
-    j := pos
-    while j < n
-        ch := string_byte_at(files, j)
-        if ch == 10
-            break
-        j = j + 1
-    path := string_sub(files, pos, j - pos)
-    if len(path) > 0
-        src := read_source_file(path)
-        if string_starts_with(src, "error:")
-            return src
-        result := parse_balance(src)
-        if string_starts_with(result, "error:")
-            return result
-    return parse_all_files(files, j + 1)
+    return "error: parser: unbalanced delimiters"

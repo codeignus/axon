@@ -1,5 +1,11 @@
-test semantic_project_check_runs
-    // Use an isolated fixture project so semantic project-check assertions
-    // are deterministic and independent from compiler self-host sources.
+test semantic_project_check_valid_fixture_passes
     got := run_semantic_project_check("tests/axon-cli/fixtures/project_typecheck_valid/src")
     assert_eq(message_is_error(got), "no")
+
+test semantic_project_check_unresolved_symbol_fixture_fails
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_bad_call/src")
+    assert_eq(message_is_error(got), "yes")
+
+test semantic_project_check_arity_mismatch_fixture_fails
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_arity_mismatch/src")
+    assert_eq(message_is_error(got), "yes")

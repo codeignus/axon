@@ -1,0 +1,4 @@
+// Complex-type string operations live here so method-style behavior can be
+// centralized later (for example lowering `s.len()` to this helper).
+pub func string_len(s: String) i64
+    return axon_string_count(s, "")

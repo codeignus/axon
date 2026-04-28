@@ -1,4 +1,4 @@
-#[axon_export]
+#[axon_pub_export]
 fn run_project_tests(target: &str) -> String {
     let scope = if target.is_empty() {
         "test:project".to_string()
@@ -36,7 +36,7 @@ fn run_project_tests(target: &str) -> String {
     )
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn run_fmt_target(target: &str) -> String {
     let root_path = if target.is_empty() {
         project_entry_root_path()

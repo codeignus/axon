@@ -1,0 +1,8 @@
+// Complex-type array/list operations live here so method-style behavior can be
+// centralized later (for example lowering `arr.len()` to this helper).
+//
+// Placeholder representation: arrays passed as comma-delimited String payloads.
+pub func array_len(items_csv: String) i64
+    if axon_string_trim(items_csv) == "":
+        return 0
+    return axon_string_count(items_csv, ",") + 1

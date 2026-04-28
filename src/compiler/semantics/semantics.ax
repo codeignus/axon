@@ -1,0 +1,236 @@
+import
+    compiler/complex_types/string { string_len }
+
+func is_ident_char(c: String) bool
+    if c == "_":
+        return true
+    b := axon_string_byte_at(c, 0)
+    if b >= 97 and b <= 122:
+        return true
+    if b >= 65 and b <= 90:
+        return true
+    if b >= 48 and b <= 57:
+        return true
+    return false
+
+func take_ident(s: String) String
+    mut i: i64 = 0
+    result := ""
+    while i < string_len(s):
+        c := axon_string_char_at(s, i)
+        if is_ident_char(c):
+            result = result + c
+        else:
+            return result
+        i = i + 1
+    return result
+
+func parse_func_name_from_line(line: String) String
+    if axon_string_starts_with(line, "func "):
+        rest := axon_string_sub(line, 5, string_len(line) - 5)
+        return take_ident(rest)
+    if axon_string_starts_with(line, "pub func "):
+        rest := axon_string_sub(line, 9, string_len(line) - 9)
+        return take_ident(rest)
+    return ""
+
+func find_char(s: String, ch: String) i64
+    mut i: i64 = 0
+    while i < string_len(s):
+        if axon_string_char_at(s, i) == ch:
+            return i
+        i = i + 1
+    return -1
+
+func parse_func_arity_from_decl(line: String) i64
+    mut rest := ""
+    if axon_string_starts_with(line, "func "):
+        rest = axon_string_sub(line, 5, string_len(line) - 5)
+    elif axon_string_starts_with(line, "pub func "):
+        rest = axon_string_sub(line, 9, string_len(line) - 9)
+    else:
+        return -1
+    open_idx := find_char(rest, "(")
+    if open_idx < 0:
+        return -1
+    after_open := axon_string_sub(rest, open_idx + 1, string_len(rest) - open_idx - 1)
+    close_idx := find_char(after_open, ")")
+    if close_idx < 0:
+        return -1
+    params := axon_string_sub(after_open, 0, close_idx)
+    params = axon_string_trim(params)
+    if string_len(params) == 0:
+        return 0
+    return axon_string_count(params, ",") + 1
+
+func count_lines(source: String) i64
+    if string_len(source) == 0:
+        return 0
+    mut count: i64 = 1
+    mut i: i64 = 0
+    while i < string_len(source):
+        if axon_string_char_at(source, i) == "\n":
+            count = count + 1
+        i = i + 1
+    return count
+
+func get_line(source: String, line_num: i64) String
+    mut current_line: i64 = 0
+    mut start: i64 = 0
+    mut i: i64 = 0
+    while i < string_len(source):
+        c := axon_string_char_at(source, i)
+        if current_line == line_num:
+            if c == "\n":
+                return axon_string_sub(source, start, i - start)
+            i = i + 1
+            continue
+        if c == "\n":
+            current_line = current_line + 1
+            start = i + 1
+        i = i + 1
+    if current_line == line_num:
+        return axon_string_sub(source, start, string_len(source) - start)
+    return ""
+
+func parse_call_name_from_line(line: String) String
+    mut i: i64 = 0
+    while i < string_len(line):
+        c := axon_string_char_at(line, i)
+        if is_ident_char(c):
+            start := i
+            while i < string_len(line) and is_ident_char(axon_string_char_at(line, i)):
+                i = i + 1
+            name := axon_string_sub(line, start, i - start)
+            if i < string_len(line) and axon_string_char_at(line, i) == "(":
+                if name == "if" or name == "elif" or name == "for" or name == "while" or name == "func" or name == "return" or name == "print" or name == "assert_eq" or name == "message_is_error":
+                    i = i + 1
+                    continue
+                if start > 0:
+                    mut k: i64 = start
+                    while k > 0 and axon_string_char_at(line, k - 1) == " ":
+                        k = k - 1
+                    if k > 0 and axon_string_char_at(line, k - 1) == ".":
+                        i = i + 1
+                        continue
+                return name
+        i = i + 1
+    return ""
+
+func count_call_args(line: String, open_pos: i64) i64
+    mut depth: i64 = 1
+    mut j: i64 = open_pos + 1
+    mut commas: i64 = 0
+    mut has_any := false
+    mut in_string := false
+    while j < string_len(line):
+        c := axon_string_char_at(line, j)
+        if in_string:
+            if c == "\\":
+                j = j + 2
+                continue
+            if c == "\"":
+                in_string = false
+            j = j + 1
+            continue
+        if c == "\"":
+            in_string = true
+            has_any = true
+            j = j + 1
+            continue
+        if c == "(":
+            depth = depth + 1
+            has_any = true
+            j = j + 1
+            continue
+        if c == ")":
+            depth = depth - 1
+            if depth == 0:
+                if has_any:
+                    return commas + 1
+                return 0
+            j = j + 1
+            continue
+        if c == "," and depth == 1:
+            commas = commas + 1
+            j = j + 1
+            continue
+        if c != " " and c != "\t":
+            has_any = true
+        j = j + 1
+    return -1
+
+func parse_call_arity_from_line(line: String) i64
+    mut i: i64 = 0
+    while i < string_len(line):
+        c := axon_string_char_at(line, i)
+        if is_ident_char(c):
+            start := i
+            while i < string_len(line) and is_ident_char(axon_string_char_at(line, i)):
+                i = i + 1
+            if i < string_len(line) and axon_string_char_at(line, i) == "(":
+                return count_call_args(line, i)
+        i = i + 1
+    return -1
+
+func name_in_seen(seen: String, name: String) bool
+    return axon_string_contains(seen, "|" + name + "|")
+
+func arity_char(n: i64) String
+    if n == 0:
+        return "0"
+    if n == 1:
+        return "1"
+    if n == 2:
+        return "2"
+    if n == 3:
+        return "3"
+    if n == 4:
+        return "4"
+    if n == 5:
+        return "5"
+    if n == 6:
+        return "6"
+    if n == 7:
+        return "7"
+    if n == 8:
+        return "8"
+    if n == 9:
+        return "9"
+    return "0"
+
+func arity_entry(name: String, arity: i64) String
+    return "|" + name + ":" + arity_char(arity) + "|"
+
+pub func axon_semantic_check(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return "ok:semantic-snippet:empty"
+    mut seen: String = "|"
+    mut arity_data: String = "|"
+    num_lines := count_lines(source)
+    mut i: i64 = 0
+    while i < num_lines:
+        line := get_line(source, i)
+        trimmed := axon_string_trim(line)
+        fname := parse_func_name_from_line(trimmed)
+        if string_len(fname) > 0:
+            if name_in_seen(seen, fname):
+                return "error: semantics: duplicate function '" + fname + "' in snippet"
+            seen = seen + fname + "|"
+            arity := parse_func_arity_from_decl(trimmed)
+            if arity >= 0:
+                arity_data = arity_data + fname + ":" + arity_char(arity) + "|"
+            i = i + 1
+            continue
+        callee := parse_call_name_from_line(trimmed)
+        if string_len(callee) > 0:
+            got_arity := parse_call_arity_from_line(trimmed)
+            entry := "|" + callee + ":"
+            if axon_string_contains(arity_data, entry):
+                expected_entry := "|" + callee + ":" + arity_char(got_arity) + "|"
+                if axon_string_contains(arity_data, expected_entry) == false:
+                    return "error: semantics: arity mismatch calling '" + callee + "' in snippet"
+            else:
+                return "error: semantics: unresolved symbol '" + callee + "' in snippet"
+        i = i + 1
+    return "ok:semantic-snippet"
