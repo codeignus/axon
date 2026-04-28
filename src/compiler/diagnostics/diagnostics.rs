@@ -101,17 +101,17 @@ fn diag_error(kind: &str, msg: &str) -> String {
     format!("error: stage={} code=E1000 reason={}", kind, msg)
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn diag_warn(kind: &str, msg: &str) -> String {
     format!("warning: stage={} code=W1000 reason={}", kind, msg)
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn diag_note(kind: &str, msg: &str) -> String {
     format!("note: stage={} code=N1000 reason={}", kind, msg)
 }
 
-#[axon_export]
+#[axon_pub_export]
 fn diag_internal(msg: &str) -> String {
     format!("error: stage=internal code=E0001 reason={}", msg)
 }

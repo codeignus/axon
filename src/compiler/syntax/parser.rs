@@ -23,17 +23,17 @@ fn describe_parse_impl(source: &str) -> String {
             '(' | '[' | '{' => stack.push(ch),
             ')' => {
                 if stack.pop() != Some('(') {
-                    return format!("error: parser: mismatched ')'");
+                    return format!("error: mismatched ')'");
                 }
             }
             ']' => {
                 if stack.pop() != Some('[') {
-                    return format!("error: parser: mismatched ']'");
+                    return format!("error: mismatched ']'");
                 }
             }
             '}' => {
                 if stack.pop() != Some('{') {
-                    return format!("error: parser: mismatched '}}'");
+                    return format!("error: mismatched '}}'");
                 }
             }
             _ => {}
@@ -43,7 +43,7 @@ fn describe_parse_impl(source: &str) -> String {
     if stack.is_empty() {
         "ok".to_string()
     } else {
-        "error: parser: unclosed delimiter".to_string()
+        "error: unclosed delimiter".to_string()
     }
 }
 
@@ -54,10 +54,10 @@ fn describe_parse(source: &str) -> String {
 
 fn parse_file(path: &std::path::Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
-        .map_err(|e| format!("error: parser: cannot read {}: {e}", path.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
     let got = describe_parse_impl(&src);
     if got.starts_with("error:") {
-        Err(format!("error: parser: {}: {}", path.display(), got))
+        Err(format!("error: {}: {}", path.display(), got))
     } else {
         Ok(())
     }
@@ -66,10 +66,10 @@ fn parse_file(path: &std::path::Path) -> Result<(), String> {
 fn walk_and_parse(root: &std::path::Path) -> Result<usize, String> {
     let mut checked = 0usize;
     let entries = std::fs::read_dir(root)
-        .map_err(|e| format!("error: parser: cannot read {}: {e}", root.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
     for entry in entries {
         let path = entry
-            .map_err(|e| format!("error: parser: bad dir entry: {e}"))?
+            .map_err(|e| format!("error: bad dir entry: {e}"))?
             .path();
         if path.is_dir() {
             checked += walk_and_parse(&path)?;

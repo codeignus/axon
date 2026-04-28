@@ -63,6 +63,151 @@ fn infer_return_expr_type(expr: &str) -> String {
     }
 }
 
+fn parse_func_param_types(line: &str) -> Option<(String, Vec<String>)> {
+    let func_part = if let Some(rest) = line.strip_prefix("func ") {
+        rest
+    } else {
+        line.strip_prefix("pub func ")?
+    };
+    let open = func_part.find('(')?;
+    let close = func_part[open + 1..].find(')')? + open + 1;
+    let name: String = func_part[..open]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    if name.is_empty() {
+        return None;
+    }
+    let params = func_part[open + 1..close].trim();
+    if params.is_empty() {
+        return Some((name, vec![]));
+    }
+    let mut out = Vec::new();
+    for p in params.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        if let Some((_, ty)) = p.split_once(':') {
+            out.push(ty.trim().to_string());
+        } else {
+            out.push("Unknown".to_string());
+        }
+    }
+    Some((name, out))
+}
+
+fn infer_arg_expr_type(expr: &str) -> String {
+    let e = expr.trim();
+    if e.is_empty() {
+        return "Unknown".to_string();
+    }
+    if e.starts_with('"') && e.ends_with('"') && e.len() >= 2 {
+        return "String".to_string();
+    }
+    if e == "true" || e == "false" {
+        return "Bool".to_string();
+    }
+    if e.chars().all(|c| c.is_ascii_digit()) {
+        return "Int".to_string();
+    }
+    "Unknown".to_string()
+}
+
+fn parse_call_name_and_args(line: &str) -> Option<(String, Vec<String>)> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0usize;
+    while i < chars.len() {
+        if !(chars[i].is_ascii_alphabetic() || chars[i] == '_') {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut end = i;
+        while end < chars.len() && (chars[end].is_ascii_alphanumeric() || chars[end] == '_') {
+            end += 1;
+        }
+        if start > 0 {
+            let mut k = start;
+            while k > 0 && chars[k - 1].is_whitespace() {
+                k -= 1;
+            }
+            if k > 0 && chars[k - 1] == '.' {
+                i = end;
+                continue;
+            }
+        }
+        i = end;
+        let name: String = chars[start..i].iter().collect();
+        if i >= chars.len() || chars[i] != '(' {
+            continue;
+        }
+        if matches!(
+            name.as_str(),
+            "if" | "elif" | "for" | "while" | "func" | "return" | "print" | "assert_eq"
+                | "message_is_error"
+        ) {
+            continue;
+        }
+        let mut args: Vec<String> = Vec::new();
+        let mut current = String::new();
+        let mut depth = 1usize;
+        let mut j = i + 1;
+        let mut in_string = false;
+        while j < chars.len() {
+            let c = chars[j];
+            if in_string {
+                current.push(c);
+                if c == '\\' && j + 1 < chars.len() {
+                    j += 1;
+                    current.push(chars[j]);
+                    j += 1;
+                    continue;
+                }
+                if c == '"' {
+                    in_string = false;
+                }
+                j += 1;
+                continue;
+            }
+            if c == '"' {
+                in_string = true;
+                current.push(c);
+                j += 1;
+                continue;
+            }
+            if c == '(' {
+                depth += 1;
+                current.push(c);
+                j += 1;
+                continue;
+            }
+            if c == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        args.push(trimmed.to_string());
+                    }
+                    return Some((name, args));
+                }
+                current.push(c);
+                j += 1;
+                continue;
+            }
+            if c == ',' && depth == 1 {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    args.push(trimmed.to_string());
+                }
+                current.clear();
+                j += 1;
+                continue;
+            }
+            current.push(c);
+            j += 1;
+        }
+        break;
+    }
+    None
+}
+
 fn parse_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
@@ -249,9 +394,10 @@ fn expected_import_path_exists(import_path: &str) -> bool {
 
 fn check_file_semantics(path: &Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
-        .map_err(|e| format!("error: semantics: cannot read {}: {e}", path.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
     let mut seen_funcs: HashSet<String> = HashSet::new();
     let mut declared_return: HashMap<String, String> = HashMap::new();
+    let mut declared_params: HashMap<String, Vec<String>> = HashMap::new();
     let mut active_fn = String::new();
     for line in src.lines() {
         let trimmed = line.trim();
@@ -264,7 +410,7 @@ fn check_file_semantics(path: &Path) -> Result<(), String> {
                 .trim_matches('}');
             if !target.is_empty() && !expected_import_path_exists(target) {
                 return Err(format!(
-                    "error: semantics: unresolved import '{target}' in {}",
+                    "error: unresolved import '{target}' in {}",
                     path.display()
                 ));
             }
@@ -279,21 +425,42 @@ fn check_file_semantics(path: &Path) -> Result<(), String> {
                 .collect();
             if name.is_empty() {
                 return Err(format!(
-                    "error: semantics: malformed function declaration in {}",
+                    "error: malformed function declaration in {}",
                     path.display()
                 ));
             }
             if !seen_funcs.insert(name.clone()) {
                 return Err(format!(
-                    "error: semantics: duplicate function '{name}' in {}",
+                    "error: duplicate function '{name}' in {}",
                     path.display()
                 ));
             }
             let declared =
                 parse_declared_return_type(trimmed).unwrap_or_else(|| "void".to_string());
             declared_return.insert(name.clone(), declared);
+            if let Some((fname, params)) = parse_func_param_types(trimmed) {
+                declared_params.insert(fname, params);
+            }
             active_fn = name;
             continue;
+        }
+        if let Some((callee, args)) = parse_call_name_and_args(trimmed) {
+            if let Some(expected) = declared_params.get(&callee) {
+                for (idx, arg) in args.iter().enumerate() {
+                    if idx >= expected.len() {
+                        break;
+                    }
+                    let expected_ty = expected[idx].as_str();
+                    let got_ty = infer_arg_expr_type(arg);
+                    if expected_ty != "Unknown" && got_ty != "Unknown" && expected_ty != got_ty {
+                        return Err(format!(
+                            "error: argument type mismatch calling '{callee}' (arg {} expected {expected_ty}, got {got_ty}) in {}",
+                            idx + 1,
+                            path.display()
+                        ));
+                    }
+                }
+            }
         }
         if let Some(expr) = trimmed.strip_prefix("return ") {
             if !active_fn.is_empty() {
@@ -304,21 +471,21 @@ fn check_file_semantics(path: &Path) -> Result<(), String> {
                 let got = infer_return_expr_type(expr);
                 if expected == "Int" && got != "Int" && got != "Unknown" {
                     return Err(format!(
-                        "error: semantics: return type mismatch in function '{}' (expected Int, got {got}) in {}",
+                        "error: return type mismatch in function '{}' (expected Int, got {got}) in {}",
                         active_fn,
                         path.display()
                     ));
                 }
                 if expected == "String" && got != "String" && got != "Unknown" {
                     return Err(format!(
-                        "error: semantics: return type mismatch in function '{}' (expected String, got {got}) in {}",
+                        "error: return type mismatch in function '{}' (expected String, got {got}) in {}",
                         active_fn,
                         path.display()
                     ));
                 }
                 if expected == "Bool" && got != "Bool" && got != "Unknown" {
                     return Err(format!(
-                        "error: semantics: return type mismatch in function '{}' (expected Bool, got {got}) in {}",
+                        "error: return type mismatch in function '{}' (expected Bool, got {got}) in {}",
                         active_fn,
                         path.display()
                     ));
@@ -339,10 +506,10 @@ fn collect_project_function_signatures(
         seen_local: &mut HashMap<PathBuf, HashSet<String>>,
     ) -> Result<(), String> {
         let entries = std::fs::read_dir(root)
-            .map_err(|e| format!("error: semantics: cannot read {}: {e}", root.display()))?;
+            .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
         for entry in entries {
             let path = entry
-                .map_err(|e| format!("error: semantics: bad dir entry: {e}"))?
+                .map_err(|e| format!("error: bad dir entry: {e}"))?
                 .path();
             if path.is_dir() {
                 walk(&path, sigs, seen_local)?;
@@ -352,21 +519,21 @@ fn collect_project_function_signatures(
                 continue;
             }
             let src = std::fs::read_to_string(&path)
-                .map_err(|e| format!("error: semantics: cannot read {}: {e}", path.display()))?;
+                .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
             let mut file_seen = HashSet::new();
             for line in src.lines() {
                 let trimmed = line.trim();
                 if let Some((fname, arity)) = parse_func_name_and_arity(trimmed) {
                     if !file_seen.insert(fname.clone()) {
                         return Err(format!(
-                            "error: semantics: duplicate function '{fname}' in {}",
+                            "error: duplicate function '{fname}' in {}",
                             path.display()
                         ));
                     }
                     if let Some(prev) = sigs.get(&fname) {
                         if *prev != arity {
                             return Err(format!(
-                                "error: semantics: conflicting arity for function '{fname}' across project"
+                                "error: conflicting arity for function '{fname}' across project"
                             ));
                         }
                     } else {
@@ -404,10 +571,10 @@ fn collect_project_function_signatures(
 
     fn collect_rust_exports(dir: &Path, sigs: &mut HashMap<String, usize>) -> Result<(), String> {
         let entries = std::fs::read_dir(dir)
-            .map_err(|e| format!("error: semantics: cannot read {}: {e}", dir.display()))?;
+            .map_err(|e| format!("error: cannot read {}: {e}", dir.display()))?;
         for entry in entries {
             let path = entry
-                .map_err(|e| format!("error: semantics: bad dir entry: {e}"))?
+                .map_err(|e| format!("error: bad dir entry: {e}"))?
                 .path();
             if path.is_dir() {
                 collect_rust_exports(&path, sigs)?;
@@ -418,7 +585,7 @@ fn collect_project_function_signatures(
                 continue;
             }
             let src = std::fs::read_to_string(&path)
-                .map_err(|e| format!("error: semantics: cannot read {}: {e}", path.display()))?;
+                .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
             let mut lines = src.lines().peekable();
             while let Some(line) = lines.next() {
                 if line.trim() == "#[axon_export]" {
@@ -516,10 +683,10 @@ fn verify_project_calls(
             out: &mut HashMap<String, HashMap<String, SymbolInfo>>,
         ) -> Result<(), String> {
             let entries = std::fs::read_dir(dir)
-                .map_err(|e| format!("error: semantics: cannot read {}: {e}", dir.display()))?;
+                .map_err(|e| format!("error: cannot read {}: {e}", dir.display()))?;
             for entry in entries {
                 let path = entry
-                    .map_err(|e| format!("error: semantics: bad dir entry: {e}"))?
+                    .map_err(|e| format!("error: bad dir entry: {e}"))?
                     .path();
                 if path.is_dir() {
                     walk(root, &path, out)?;
@@ -532,7 +699,7 @@ fn verify_project_calls(
                 let key = module_key_for_file(root, &path);
                 let bucket = out.entry(key).or_default();
                 let src = std::fs::read_to_string(&path)
-                    .map_err(|e| format!("error: semantics: cannot read {}: {e}", path.display()))?;
+                    .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
                 if ext == "ax" {
                     for line in src.lines() {
                         let t = line.trim();
@@ -577,10 +744,22 @@ fn verify_project_calls(
         None
     }
 
-    fn parse_import_bindings(source: &str) -> HashMap<String, String> {
-        let mut bindings = HashMap::new();
+    #[derive(Clone)]
+    struct ImportBinding {
+        symbol: String,
+        module: String,
+        line_num: usize,
+    }
+
+    fn parse_import_bindings(source: &str) -> (Vec<ImportBinding>, Vec<String>) {
+        let mut bindings = Vec::new();
+        let mut errors = Vec::new();
         let mut in_import = false;
+        let mut seen_modules: HashSet<String> = HashSet::new();
+        let mut seen_symbols: HashSet<String> = HashSet::new();
+        let mut line_num = 0usize;
         for line in source.lines() {
+            line_num += 1;
             let t = line.trim();
             if t == "import" {
                 in_import = true;
@@ -600,12 +779,42 @@ fn verify_project_calls(
                 for sym in inside.split(',') {
                     let s = sym.trim();
                     if !s.is_empty() {
-                        bindings.insert(s.to_string(), module.to_string());
+                        if !seen_symbols.insert(s.to_string()) {
+                            errors.push(format!(
+                                "error: duplicate import '{s}' in {}",
+                                line_num
+                            ));
+                        }
+                        bindings.push(ImportBinding {
+                            symbol: s.to_string(),
+                            module: module.to_string(),
+                            line_num,
+                        });
+                    }
+                }
+            } else {
+                let parts: Vec<&str> = t.split_whitespace().collect();
+                if parts.len() == 1 {
+                    let mod_path = parts[0];
+                    if !seen_modules.insert(mod_path.to_string()) {
+                        errors.push(format!(
+                            "error: duplicate module import '{mod_path}' in {}",
+                            line_num
+                        ));
+                    }
+                } else if parts.len() == 2 {
+                    let mod_path = parts[0];
+                    let alias = parts[1];
+                    if !seen_modules.insert(alias.to_string()) {
+                        errors.push(format!(
+                            "error: duplicate alias '{alias}' for module '{mod_path}' in {}",
+                            line_num
+                        ));
                     }
                 }
             }
         }
-        bindings
+        (bindings, errors)
     }
 
     fn walk(
@@ -614,10 +823,10 @@ fn verify_project_calls(
         module_symbols: &HashMap<String, HashMap<String, SymbolInfo>>,
     ) -> Result<(), String> {
         let entries = std::fs::read_dir(root)
-            .map_err(|e| format!("error: semantics: cannot read {}: {e}", root.display()))?;
+            .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
         for entry in entries {
             let path = entry
-                .map_err(|e| format!("error: semantics: bad dir entry: {e}"))?
+                .map_err(|e| format!("error: bad dir entry: {e}"))?
                 .path();
             if path.is_dir() {
                 walk(&path, sigs, module_symbols)?;
@@ -627,9 +836,12 @@ fn verify_project_calls(
                 continue;
             }
             let src = std::fs::read_to_string(&path)
-                .map_err(|e| format!("error: semantics: cannot read {}: {e}", path.display()))?;
+                .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
             let current_module = module_key_for_file(root, &path);
-            let imports = parse_import_bindings(&src);
+            let (imports, import_errors) = parse_import_bindings(&src);
+            for err in &import_errors {
+                return Err(err.clone());
+            }
             let local_symbols = module_symbols
                 .get(&current_module)
                 .cloned()
@@ -645,29 +857,49 @@ fn verify_project_calls(
                     }
                     let expected = if let Some(local) = local_symbols.get(&callee) {
                         Some(local.arity)
-                    } else if let Some(target_module) = imports.get(&callee) {
-                        resolve_import_module_key(target_module, module_symbols)
-                            .and_then(|m| m.get(&callee))
-                            .and_then(|sym| {
-                                if sym.is_pub {
-                                    Some(sym.arity)
-                                } else {
-                                    None
-                                }
-                            })
                     } else {
-                        None
+                        let mut found: Option<usize> = None;
+                        for binding in &imports {
+                            if binding.symbol == callee {
+                                if let Some(target_syms) =
+                                    resolve_import_module_key(&binding.module, module_symbols)
+                                {
+                                    if let Some(sym) = target_syms.get(&callee) {
+                                        if sym.is_pub {
+                                            found = Some(sym.arity);
+                                        } else {
+                                            return Err(format!(
+                                                "error: '{}' is not public in module '{}' (private access) in {}",
+                                                callee, binding.module, path.display()
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(format!(
+                                            "error: '{}' not found in module '{}' in {}",
+                                            callee, binding.module, path.display()
+                                        ));
+                                    }
+                                } else {
+                                    return Err(format!(
+                                        "error: module '{}' not found for import '{}' in {}",
+                                        binding.module, callee, path.display()
+                                    ));
+                                }
+                                break;
+                            }
+                        }
+                        found
                     };
                     if let Some(expected_arity) = expected {
                         if expected_arity != got_arity {
                             return Err(format!(
-                                "error: semantics: arity mismatch calling '{callee}' (expected {expected_arity}, got {got_arity}) in {}",
+                                "error: arity mismatch calling '{callee}' (expected {expected_arity}, got {got_arity}) in {}",
                                 path.display()
                             ));
                         }
                     } else {
                         return Err(format!(
-                            "error: semantics: unresolved symbol '{callee}' in {}",
+                            "error: unresolved symbol '{callee}' in {}",
                             path.display()
                         ));
                     }
@@ -675,17 +907,23 @@ fn verify_project_calls(
                 if let Some((method, got_arity)) = parse_method_call_name_and_arity(trimmed) {
                     if method == "len" {
                         let expected_arity = got_arity + 1;
-                        let string_ok = sigs
-                            .get("string_len")
-                            .map(|a| *a == expected_arity)
-                            .unwrap_or(false);
-                        let array_ok = sigs
-                            .get("array_len")
-                            .map(|a| *a == expected_arity)
-                            .unwrap_or(false);
+                        let string_ok = module_symbols
+                            .values()
+                            .any(|syms| {
+                                syms.get("string_len")
+                                    .map(|s| s.arity == expected_arity && s.is_pub)
+                                    .unwrap_or(false)
+                            });
+                        let array_ok = module_symbols
+                            .values()
+                            .any(|syms| {
+                                syms.get("array_len")
+                                    .map(|s| s.arity == expected_arity && s.is_pub)
+                                    .unwrap_or(false)
+                            });
                         if !string_ok && !array_ok {
                             return Err(format!(
-                                "error: semantics: unresolved method '{}' in {}",
+                                "error: unresolved method '{}' in {}",
                                 method,
                                 path.display()
                             ));
@@ -703,10 +941,10 @@ fn verify_project_calls(
 fn walk_and_check(root: &Path) -> Result<usize, String> {
     let mut checked = 0usize;
     let entries = std::fs::read_dir(root)
-        .map_err(|e| format!("error: semantics: cannot read {}: {e}", root.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
     for entry in entries {
         let path = entry
-            .map_err(|e| format!("error: semantics: bad dir entry: {e}"))?
+            .map_err(|e| format!("error: bad dir entry: {e}"))?
             .path();
         if path.is_dir() {
             checked += walk_and_check(&path)?;
@@ -738,10 +976,10 @@ fn run_semantic_check(source: &str) -> String {
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                 .collect();
             if name.is_empty() {
-                return "error: semantics: malformed function declaration in snippet".to_string();
+                return "error: malformed function declaration in snippet".to_string();
             }
             if !seen.insert(name.clone()) {
-                return format!("error: semantics: duplicate function '{name}' in snippet");
+                return format!("error: duplicate function '{name}' in snippet");
             }
             if let Some((fname, arity)) = parse_func_name_and_arity(trimmed) {
                 func_arity.insert(fname, arity);
@@ -752,12 +990,12 @@ fn run_semantic_check(source: &str) -> String {
             if let Some(expected_arity) = func_arity.get(&callee) {
                 if *expected_arity != got_arity {
                     return format!(
-                        "error: semantics: arity mismatch calling '{callee}' (expected {}, got {got_arity}) in snippet",
+                        "error: arity mismatch calling '{callee}' (expected {}, got {got_arity}) in snippet",
                         expected_arity
                     );
                 }
             } else {
-                return format!("error: semantics: unresolved symbol '{callee}' in snippet");
+                return format!("error: unresolved symbol '{callee}' in snippet");
             }
         }
         if let Some((method, got_arity)) = parse_method_call_name_and_arity(trimmed) {
@@ -772,7 +1010,7 @@ fn run_semantic_check(source: &str) -> String {
                     .map(|a| *a == expected_arity)
                     .unwrap_or(false);
                 if !string_ok && !array_ok {
-                    return format!("error: semantics: unresolved method '{method}' in snippet");
+                    return format!("error: unresolved method '{method}' in snippet");
                 }
             }
         }

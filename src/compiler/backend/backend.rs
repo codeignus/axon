@@ -1,10 +1,10 @@
 #[axon_pub_export]
 fn run_lowered_to_artifact(lowered: &str) -> String {
     if lowered.is_empty() {
-        return "error: backend: empty IR module".to_string();
+        return "error: empty IR module".to_string();
     }
     if !lowered.starts_with("ok:lowered:") {
-        return "error: backend: lowering did not produce expected result".to_string();
+        return "error: lowering did not produce expected result".to_string();
     }
     // Native artifact path: reuse the host-native backend pipeline as a strict
     // external toolchain boundary until Axon-native MIR/backend fully owns it.
@@ -22,11 +22,11 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
             Ok(out) if out.status.success() => {}
             Ok(out) => {
                 return format!(
-                    "error: backend: host compiler build failed: {}",
+                    "error: host compiler build failed: {}",
                     String::from_utf8_lossy(&out.stderr).trim()
                 )
             }
-            Err(e) => return format!("error: backend: cannot build host compiler: {e}"),
+            Err(e) => return format!("error: cannot build host compiler: {e}"),
         }
     }
 
@@ -38,26 +38,26 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
         Ok(out) if out.status.success() => {}
         Ok(out) => {
             return format!(
-                "error: backend: native build failed: {}",
+                "error: native build failed: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             )
         }
-        Err(e) => return format!("error: backend: cannot run native build: {e}"),
+        Err(e) => return format!("error: cannot run native build: {e}"),
     }
 
     let out_dir = std::path::Path::new("target/build/axon");
     if let Err(e) = std::fs::create_dir_all(out_dir) {
-        return format!("error: backend: cannot create {}: {e}", out_dir.display());
+        return format!("error: cannot create {}: {e}", out_dir.display());
     }
     let out_bin = out_dir.join("app");
 
     let native_artifact = match resolve_native_artifact_path() {
         Some(p) => p,
-        None => return "error: backend: native artifact not found after build".to_string(),
+        None => return "error: native artifact not found after build".to_string(),
     };
     if let Err(e) = std::fs::copy(&native_artifact, &out_bin) {
         return format!(
-            "error: backend: cannot publish artifact {}: {e}",
+            "error: cannot publish artifact {}: {e}",
             out_bin.display()
         );
     }
@@ -68,7 +68,7 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
             std::fs::set_permissions(&out_bin, std::fs::Permissions::from_mode(0o755))
         {
             return format!(
-                "error: backend: cannot set executable permissions on {}: {e}",
+                "error: cannot set executable permissions on {}: {e}",
                 out_bin.display()
             );
         }
@@ -82,7 +82,7 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
         lowered
     );
     if let Err(e) = std::fs::write(&marker, manifest) {
-        return format!("error: backend: cannot write {}: {e}", marker.display());
+        return format!("error: cannot write {}: {e}", marker.display());
     }
     "ok".to_string()
 }
@@ -92,7 +92,7 @@ fn launch_self_built() -> String {
     let target = std::path::Path::new("target/build/axon/app");
     if !target.exists() {
         return format!(
-            "error: backend: {} not found, run build first",
+            "error: {} not found, run build first",
             target.display()
         );
     }
@@ -127,27 +127,27 @@ fn launch_self_built() -> String {
                     Ok(retry) => {
                         let err = String::from_utf8_lossy(&retry.stderr);
                         return format!(
-                            "error: backend: launch retry failed for {}: {}",
+                            "error: launch retry failed for {}: {}",
                             target.display(),
                             err.trim()
                         );
                     }
                     Err(e) => {
                         return format!(
-                            "error: backend: cannot execute retry for {}: {e}",
+                            "error: cannot execute retry for {}: {e}",
                             target.display()
                         );
                     }
                 }
             }
             format!(
-                "error: backend: launch failed for {}: {}",
+                "error: launch failed for {}: {}",
                 target.display(),
                 stderr.trim()
             )
         }
         Err(e) => format!(
-            "error: backend: cannot execute {}: {e}",
+            "error: cannot execute {}: {e}",
             target.display()
         ),
     }

@@ -1,0 +1,6 @@
+import
+    helper { helper }
+
+func main() String
+    helper()
+    return "ok"

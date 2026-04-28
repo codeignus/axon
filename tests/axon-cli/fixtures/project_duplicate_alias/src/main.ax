@@ -1,0 +1,6 @@
+import
+    compiler/diagnostics { message_is_error }
+    compiler/diagnostics { message_is_error }
+
+func main() String
+    return "ok"

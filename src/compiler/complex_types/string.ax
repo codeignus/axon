@@ -2,3 +2,21 @@
 // centralized later (for example lowering `s.len()` to this helper).
 pub func string_len(s: String) i64
     return axon_string_count(s, "")
+
+pub func string_contains(haystack: String, needle: String) bool
+    return axon_string_contains(haystack, needle)
+
+pub func string_starts_with(s: String, prefix: String) bool
+    return axon_string_starts_with(s, prefix)
+
+pub func string_char_at(s: String, index: i64) String
+    return axon_string_char_at(s, index)
+
+pub func string_byte_at(s: String, index: i64) i64
+    return axon_string_byte_at(s, index)
+
+pub func string_sub(s: String, start: i64, length: i64) String
+    return axon_string_sub(s, start, length)
+
+pub func string_trim(s: String) String
+    return axon_string_trim(s)

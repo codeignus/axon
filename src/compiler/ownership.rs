@@ -4,14 +4,14 @@
 
 fn check_file_ownership(path: &Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
-        .map_err(|e| format!("error: ownership: cannot read {}: {e}", path.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
     for (idx, line) in src.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.contains("condition_scope_consume(")
             && !path.ends_with("src/compiler/ownership.ax")
         {
             return Err(format!(
-                "error: ownership: manual condition consume is forbidden at {}:{}",
+                "error: manual condition consume is forbidden at {}:{}",
                 path.display(),
                 idx + 1
             ));
@@ -20,14 +20,14 @@ fn check_file_ownership(path: &Path) -> Result<(), String> {
             && !path.ends_with("src/compiler/ownership.ax")
         {
             return Err(format!(
-                "error: ownership: manual condition scope begin is forbidden at {}:{}",
+                "error: manual condition scope begin is forbidden at {}:{}",
                 path.display(),
                 idx + 1
             ));
         }
         if trimmed.contains("dealloc(") || trimmed.contains("free(") {
             return Err(format!(
-                "error: ownership: manual deallocation is forbidden at {}:{}",
+                "error: manual deallocation is forbidden at {}:{}",
                 path.display(),
                 idx + 1
             ));
@@ -39,10 +39,10 @@ fn check_file_ownership(path: &Path) -> Result<(), String> {
 fn walk_and_check_ownership(root: &Path) -> Result<usize, String> {
     let mut checked = 0usize;
     let entries = std::fs::read_dir(root)
-        .map_err(|e| format!("error: ownership: cannot read {}: {e}", root.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
     for entry in entries {
         let path = entry
-            .map_err(|e| format!("error: ownership: bad dir entry: {e}"))?
+            .map_err(|e| format!("error: bad dir entry: {e}"))?
             .path();
         if path.is_dir() {
             checked += walk_and_check_ownership(&path)?;

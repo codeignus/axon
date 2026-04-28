@@ -1,0 +1,6 @@
+func add(a: Int, b: Int) Int
+    return 1
+
+func main() Int
+    add(1, 2)
+    return 0

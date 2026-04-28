@@ -1,0 +1,16 @@
+// Determinism gate: same source must produce same results on repeated runs.
+test build_determinism_two_consecutive_builds_return_ok
+    first := run_check_for_path("")
+    assert_eq(message_is_error(first), "no")
+    second := run_check_for_path("")
+    assert_eq(message_is_error(second), "no")
+    assert_eq(first, second)
+
+test build_determinism_check_output_stable
+    a := run_check_for_path("")
+    b := run_check_for_path("")
+    assert_eq(a, b)
+
+test ownership_invariants_pass_on_self_project
+    own := validate_ownership_invariants()
+    assert_eq(message_is_error(own), "no")

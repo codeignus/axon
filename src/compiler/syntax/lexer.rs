@@ -4,10 +4,10 @@ fn lex_token_count(source: &str) -> usize {
 
 fn check_file_for_lex(path: &Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
-        .map_err(|e| format!("error: lexer: cannot read {}: {e}", path.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
     if src.contains('\0') {
         return Err(format!(
-            "error: lexer: NUL byte not allowed in {}",
+            "error: NUL byte not allowed in {}",
             path.display()
         ));
     }
@@ -17,10 +17,10 @@ fn check_file_for_lex(path: &Path) -> Result<(), String> {
 fn walk_and_lex(root: &Path) -> Result<usize, String> {
     let mut checked = 0usize;
     let entries = std::fs::read_dir(root)
-        .map_err(|e| format!("error: lexer: cannot read {}: {e}", root.display()))?;
+        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
     for entry in entries {
         let path = entry
-            .map_err(|e| format!("error: lexer: bad dir entry: {e}"))?
+            .map_err(|e| format!("error: bad dir entry: {e}"))?
             .path();
         if path.is_dir() {
             checked += walk_and_lex(&path)?;

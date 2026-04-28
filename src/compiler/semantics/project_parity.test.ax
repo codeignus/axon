@@ -9,3 +9,11 @@ test semantic_project_check_unresolved_symbol_fixture_fails
 test semantic_project_check_arity_mismatch_fixture_fails
     got := run_semantic_project_check("tests/axon-cli/fixtures/project_arity_mismatch/src")
     assert_eq(message_is_error(got), "yes")
+
+test semantic_project_check_arg_type_mismatch_fixture_fails
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_arg_type_mismatch/src")
+    assert_eq(message_is_error(got), "yes")
+
+test semantic_project_check_duplicate_alias_fixture_fails
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_duplicate_alias/src")
+    assert_eq(message_is_error(got), "yes")

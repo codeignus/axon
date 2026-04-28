@@ -6,3 +6,6 @@ pub func array_len(items_csv: String) i64
     if axon_string_trim(items_csv) == "":
         return 0
     return axon_string_count(items_csv, ",") + 1
+
+pub func array_is_empty(items_csv: String) bool
+    return axon_string_trim(items_csv) == ""

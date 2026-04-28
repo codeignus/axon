@@ -1,0 +1,6 @@
+import
+    lib { secret }
+
+func main() String
+    secret()
+    return "ok"

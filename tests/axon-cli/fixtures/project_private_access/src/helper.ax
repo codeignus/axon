@@ -1,0 +1,5 @@
+func helper() String
+    return "x"
+
+func main() String
+    return "ok"

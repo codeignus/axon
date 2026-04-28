@@ -14,8 +14,8 @@ enum Command {
     Check { target: Option<String> },
     Build,
     Run,
-    Test { target: String },
-    Fmt { target: String },
+    Test { target: Option<String> },
+    Fmt { target: Option<String> },
     Mcp,
 }
 
@@ -47,8 +47,8 @@ fn cli_target() -> String {
     let args = Cli::parse();
     match args.command {
         Command::Check { target } => target.unwrap_or_default(),
-        Command::Test { target } => target,
-        Command::Fmt { target } => target,
+        Command::Test { target } => target.unwrap_or_default(),
+        Command::Fmt { target } => target.unwrap_or_default(),
         Command::Build | Command::Run | Command::Mcp => "".to_string(),
     }
 }

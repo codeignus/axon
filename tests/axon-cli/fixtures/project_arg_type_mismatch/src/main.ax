@@ -1,0 +1,6 @@
+func takes_int(v: Int) Int
+    return v
+
+func main() Int
+    takes_int("bad")
+    return 0
