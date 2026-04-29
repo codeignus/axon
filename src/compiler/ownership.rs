@@ -62,10 +62,9 @@ fn walk_and_check_ownership(root: &Path) -> Result<usize, String> {
 
 #[axon_export]
 fn run_ownership_project_check(root: &str) -> String {
-    let root_path = if root.is_empty() {
-        project_entry_root_path()
-    } else {
-        PathBuf::from(root)
+    let root_path = match root.is_empty() {
+        true => project_entry_root_path(),
+        false => PathBuf::from(root),
     };
     match walk_and_check_ownership(&root_path) {
         Ok(count) => format!("ok:ownership:{count}"),

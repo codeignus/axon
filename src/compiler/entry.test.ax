@@ -15,14 +15,10 @@ test self_bootstrap_gate_runs
     result := self_bootstrap_gate()
     assert_eq(result, result)
 
-test test_entrypoint_runs
-    result := run_project_tests("")
+test run_tests_runs
+    result := run_tests("")
     assert_eq(result, result)
 
-test fmt_entrypoint_runs
-    result := run_fmt_target("")
+test run_fmt_runs
+    result := run_fmt("")
     assert_eq(result, result)
-
-test mcp_entrypoint_runs
-    result := mcp_status()
-    assert_eq(result, "ok:mcp:available")

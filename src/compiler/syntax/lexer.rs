@@ -4,47 +4,32 @@ fn classify_token(trimmed: &str) -> &'static str {
     if trimmed.is_empty() {
         return "empty";
     }
-    if matches!(
-        trimmed,
-        ":=" | "==" | "!=" | "<=" | ">="
-    ) {
+    if matches!(trimmed, ":=" | "==" | "!=" | "<=" | ">=") {
         return "operator";
     }
     let Some(first) = trimmed.chars().next() else {
         return "empty";
     };
-    if first == '"' {
-        return "string_literal";
-    }
-    if first.is_ascii_digit() {
-        return "int_literal";
-    }
-    if matches!(
-        first,
-        '(' | ')' | '{' | '}' | '[' | ']' | ':' | ',' | '.'
-    ) {
-        return "delimiter";
-    }
-    if matches!(
-        first,
-        '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/'
-    ) {
-        return "operator";
-    }
-    if matches!(first, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
-        if matches!(
-            trimmed,
-            "func" | "pub" | "import" | "return" | "if" | "elif" | "else" | "mut"
-                | "for" | "while" | "test"
-        ) {
-            return "keyword";
+    match first {
+        '"' => "string_literal",
+        '0'..='9' => "int_literal",
+        '(' | ')' | '{' | '}' | '[' | ']' | ':' | ',' | '.' => "delimiter",
+        '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' => "operator",
+        'a'..='z' | 'A'..='Z' | '_' => {
+            if matches!(
+                trimmed,
+                "func" | "pub" | "import" | "return" | "if" | "elif" | "else" | "mut"
+                    | "for" | "while" | "test"
+            ) {
+                return "keyword";
+            }
+            match trimmed {
+                "true" | "false" => "bool_literal",
+                _ => "identifier",
+            }
         }
-        if trimmed == "true" || trimmed == "false" {
-            return "bool_literal";
-        }
-        return "identifier";
+        _ => "unknown",
     }
-    "unknown"
 }
 
 fn scan_lex_contract(source: &str) -> Result<usize, String> {
@@ -55,11 +40,13 @@ fn scan_lex_contract(source: &str) -> Result<usize, String> {
     let mut tokens = 0usize;
 
     let mut bump_pos = |c: char, col: &mut usize, line: &mut usize| {
-        if c == '\n' {
-            *line += 1;
-            *col = 1;
-        } else if c != '\r' {
-            *col += 1;
+        match c {
+            '\n' => {
+                *line += 1;
+                *col = 1;
+            }
+            '\r' => {}
+            _ => *col += 1,
         }
     };
 
@@ -75,22 +62,26 @@ fn scan_lex_contract(source: &str) -> Result<usize, String> {
             i += 1;
             bump_pos(c, &mut col, &mut line);
             while i < chars.len() {
-                if chars[i] == '\\' {
-                    bump_pos(chars[i], &mut col, &mut line);
-                    i += 1;
-                    if i < chars.len() {
+                match chars[i] {
+                    '\\' => {
+                        bump_pos(chars[i], &mut col, &mut line);
+                        i += 1;
+                        if i < chars.len() {
+                            bump_pos(chars[i], &mut col, &mut line);
+                            i += 1;
+                        }
+                        continue;
+                    }
+                    '"' => {
+                        bump_pos(chars[i], &mut col, &mut line);
+                        i += 1;
+                        break;
+                    }
+                    _ => {
                         bump_pos(chars[i], &mut col, &mut line);
                         i += 1;
                     }
-                    continue;
                 }
-                if chars[i] == '"' {
-                    bump_pos(chars[i], &mut col, &mut line);
-                    i += 1;
-                    break;
-                }
-                bump_pos(chars[i], &mut col, &mut line);
-                i += 1;
             }
             continue;
         }
@@ -111,10 +102,7 @@ fn scan_lex_contract(source: &str) -> Result<usize, String> {
 
         while i < chars.len() {
             let t = chars[i];
-            if t.is_whitespace() {
-                break;
-            }
-            if t == '"' {
+            if t.is_whitespace() || t == '"' {
                 break;
             }
             if t == '/' && i + 1 < chars.len() && chars[i + 1] == '/' {
@@ -142,10 +130,7 @@ fn check_file_for_lex(path: &std::path::Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
         .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
     if src.contains('\0') {
-        return Err(format!(
-            "error: NUL byte not allowed in {}",
-            path.display()
-        ));
+        return Err(format!("error: NUL byte not allowed in {}", path.display()));
     }
     scan_lex_contract(&src)
         .map(|_| ())
@@ -182,10 +167,9 @@ fn describe_tokenization(source: &str) -> String {
 
 #[axon_pub_export]
 fn run_lex_check(root: &str) -> String {
-    let root_path = if root.is_empty() {
-        project_entry_root_path()
-    } else {
-        PathBuf::from(root)
+    let root_path = match root.is_empty() {
+        true => project_entry_root_path(),
+        false => PathBuf::from(root),
     };
     match walk_and_lex(&root_path) {
         Ok(count) => format!("ok:lexed:{count}"),

@@ -1,15 +1,7 @@
 // Axon-native parser. Structural analysis truth lives here.
-// The sidecar (parser.rs) handles file I/O and delegates structural checks
-// to this module for snippet-level analysis.
-//
-// Parse contract:
-// - Delimiters must be balanced (counting only outside strings)
-// - Function/import/test declarations are counted for structural validation
-// - The sidecar uses describe_parse (string-aware balance) for project-level checks
+// The sidecar (parser.rs) handles file I/O; project checks use its string-aware balance.
 
 pub func check_balance_simple(source: String) String
-    // Quick delimiter balance check. Does NOT handle string contents.
-    // Use sidecar's describe_parse for full string-aware validation.
     opens := axon_string_count(source, "(") + axon_string_count(source, "[") + axon_string_count(source, "{")
     closes := axon_string_count(source, ")") + axon_string_count(source, "]") + axon_string_count(source, "}")
     if opens == closes:
@@ -20,11 +12,9 @@ pub func parse_balance_native(source: String) String
     return check_balance_simple(source)
 
 pub func count_function_declarations(source: String) i64
-    // Count lines that START with "func " or "pub func ".
-    // Subtract "pub func " from total "func " to avoid double-counting.
-    total_func := axon_string_count(source, "func ")
-    pub_func := axon_string_count(source, "pub func ")
-    return total_func - pub_func
+    total := axon_string_count(source, "func ")
+    pub_funcs := axon_string_count(source, "pub func ")
+    return total - pub_funcs
 
 pub func count_pub_function_declarations(source: String) i64
     return axon_string_count(source, "pub func ")

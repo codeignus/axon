@@ -6,48 +6,34 @@ import
 // Unified slot model (mut and non-mut):
 // - A binding is a slot (pointer to value). Readers get references; writes go through `mut`.
 // - Heap-owned values have a single canonical owner along each execution path: the last user
-//   (reverse-use “last survivor”) holds ownership and is responsible for deallocation.
+//   (reverse-use "last survivor") holds ownership and is responsible for deallocation.
 //
-// Conditionals behave like inlined scopes with caller values “passed” in—outer bindings are inputs;
+// Conditionals behave like inlined scopes with caller values "passed" in — outer bindings are inputs;
 // branches are analyzed independently (only one runs at runtime). Reassigning a `mut` slot in `if`
-// and again in `elif` is not two competing owners—it is updating the slot on mutually exclusive paths.
+// and again in `elif` is not two competing owners — it is updating the slot on mutually exclusive paths.
 // Enforcement: reverse-use assigns `MirFunc::owned_locals` per CFG path; see rust-backed-compiler-for-axon
 // `axon-codegen` crate (`llvm_backend` module docs: Conditionals and mut); do not replace with line-scan heuristics.
-//
-// FFI: String from Rust crosses as ptr+len; Axon becomes canonical owner once received.
-//
-// User code never calls manual free/dealloc; condition_* hooks below are intentional no-ops
-// documenting future codegen hooks—not user APIs.
-
-pub func ffi_string_transfer_contract() String
-    return "ffi:string:transfer rust->axon ptr+len; free at canonical owner"
-
-pub func condition_scope_begin(owner: String) String
-    return owner
-
-pub func condition_scope_consume(scope: String, branch: String) void
-    return
-
-pub func validate_conditional_ownership_contract() String
-    return "ok:ownership:conditional-slot-model:last-survivor-in-codegen"
-
-pub func validate_escape_merge_contract() String
-    return "ok:ownership:escape-merge-via-reverse-use-not-line-scan"
-
-pub func validate_user_no_manual_dealloc_contract() String
-    return "ok:ownership:compiler-managed-lifecycle"
 
 pub func validate_ownership_invariants() String
-    cond := validate_conditional_ownership_contract()
+    cond := validate_conditional_contract()
     if message_is_error(cond) == "yes":
         return cond
     merge := validate_escape_merge_contract()
     if message_is_error(merge) == "yes":
         return merge
-    lifecycle := validate_user_no_manual_dealloc_contract()
+    lifecycle := validate_lifecycle_contract()
     if message_is_error(lifecycle) == "yes":
         return lifecycle
-    ownership_project := run_ownership_project_check("")
-    if message_is_error(ownership_project) == "yes":
-        return ownership_project
+    project := run_ownership_project_check("")
+    if message_is_error(project) == "yes":
+        return project
     return "ok"
+
+pub func validate_conditional_contract() String
+    return "ok:ownership:conditional-slot-model:last-survivor-in-codegen"
+
+pub func validate_escape_merge_contract() String
+    return "ok:ownership:escape-merge-via-reverse-use-not-line-scan"
+
+pub func validate_lifecycle_contract() String
+    return "ok:ownership:compiler-managed-lifecycle"

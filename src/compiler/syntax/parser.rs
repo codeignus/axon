@@ -1,6 +1,5 @@
-// String-aware delimiter balance matches `describe_parse`; `parser.ax`'s
-// `check_balance_simple` is a naive count helper only — project checks rely on this.
-// String-aware delimiter balance; `parser.ax`/`check_balance_simple` is naive-only.
+// String-aware delimiter balance for project-level parse checks.
+// `parser.ax`/`check_balance_simple` is a naive count helper only — project checks rely on this.
 fn describe_parse_impl(source: &str) -> String {
     let mut stack: Vec<char> = Vec::new();
     let chars: Vec<char> = source.chars().collect();
@@ -26,27 +25,26 @@ fn describe_parse_impl(source: &str) -> String {
             '(' | '[' | '{' => stack.push(ch),
             ')' => {
                 if stack.pop() != Some('(') {
-                    return format!("error: mismatched ')'");
+                    return "error: mismatched ')'".to_string();
                 }
             }
             ']' => {
                 if stack.pop() != Some('[') {
-                    return format!("error: mismatched ']'");
+                    return "error: mismatched ']'".to_string();
                 }
             }
             '}' => {
                 if stack.pop() != Some('{') {
-                    return format!("error: mismatched '}}'");
+                    return "error: mismatched '}'".to_string();
                 }
             }
             _ => {}
         }
         i += 1;
     }
-    if stack.is_empty() {
-        "ok".to_string()
-    } else {
-        "error: unclosed delimiter".to_string()
+    match stack.is_empty() {
+        true => "ok".to_string(),
+        false => "error: unclosed delimiter".to_string(),
     }
 }
 
@@ -58,11 +56,10 @@ fn describe_parse(source: &str) -> String {
 fn parse_file(path: &std::path::Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
         .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
-    let got = describe_parse_impl(&src);
-    if got.starts_with("error:") {
-        Err(format!("error: {}: {}", path.display(), got))
-    } else {
-        Ok(())
+    let result = describe_parse_impl(&src);
+    match result.starts_with("error:") {
+        true => Err(format!("error: {}: {}", path.display(), result)),
+        false => Ok(()),
     }
 }
 
@@ -93,10 +90,9 @@ fn walk_and_parse(root: &std::path::Path) -> Result<usize, String> {
 
 #[axon_pub_export]
 fn run_parse_check(root: &str) -> String {
-    let root_path = if root.is_empty() {
-        std::path::PathBuf::from("src")
-    } else {
-        std::path::PathBuf::from(root)
+    let root_path = match root.is_empty() {
+        true => std::path::PathBuf::from("src"),
+        false => std::path::PathBuf::from(root),
     };
     match walk_and_parse(&root_path) {
         Ok(count) => format!("ok:parsed:{count}"),

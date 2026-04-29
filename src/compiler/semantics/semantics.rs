@@ -1020,10 +1020,9 @@ fn run_semantic_check(source: &str) -> String {
 
 #[axon_pub_export]
 fn run_semantic_project_check(root: &str) -> String {
-    let root_path = if root.is_empty() {
-        project_entry_root_path()
-    } else {
-        PathBuf::from(root)
+    let root_path = match root.is_empty() {
+        true => project_entry_root_path(),
+        false => PathBuf::from(root),
     };
     match walk_and_check(&root_path) {
         Ok(count) => {
