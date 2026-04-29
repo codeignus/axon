@@ -48,6 +48,10 @@ pub func classify_token(token: String) String
             return "operator"
         "!=":
             return "operator"
+        "&&":
+            return "operator"
+        "||":
+            return "operator"
         "<=":
             return "operator"
         ">=":

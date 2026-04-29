@@ -74,6 +74,12 @@ fn message_is_error(s: &str) -> String {
     }
 }
 
+/// Prefer this for `if` conditions in bytecode: avoids string-vs-string lowering bugs.
+#[axon_pub_export]
+fn stage_should_abort(msg: &str) -> bool {
+    !msg.is_empty() && msg.starts_with("error:")
+}
+
 #[axon_export]
 fn message_is_warning(s: &str) -> String {
     if !s.is_empty() && s.starts_with("warning:") {

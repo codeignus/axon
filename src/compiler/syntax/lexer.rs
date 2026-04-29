@@ -4,7 +4,7 @@ fn classify_token(trimmed: &str) -> &'static str {
     if trimmed.is_empty() {
         return "empty";
     }
-    if matches!(trimmed, ":=" | "==" | "!=" | "<=" | ">=") {
+    if matches!(trimmed, ":=" | "==" | "!=" | "<=" | ">=" | "&&" | "||") {
         return "operator";
     }
     let Some(first) = trimmed.chars().next() else {
@@ -165,8 +165,7 @@ fn describe_tokenization(source: &str) -> String {
     }
 }
 
-#[axon_pub_export]
-fn run_lex_check(root: &str) -> String {
+fn lex_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
         false => PathBuf::from(root),
@@ -175,4 +174,15 @@ fn run_lex_check(root: &str) -> String {
         Ok(count) => format!("ok:lexed:{count}"),
         Err(err) => err,
     }
+}
+
+#[axon_pub_export]
+fn run_lex_check(root: &str) -> String {
+    lex_check_message(root)
+}
+
+/// Bool path avoids Axon codegen bugs when inspecting returned `String` values from Rust.
+#[axon_pub_export]
+fn lex_stage_failed(root: &str) -> bool {
+    lex_check_message(root).starts_with("error")
 }

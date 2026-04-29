@@ -88,8 +88,7 @@ fn walk_and_parse(root: &std::path::Path) -> Result<usize, String> {
     Ok(checked)
 }
 
-#[axon_pub_export]
-fn run_parse_check(root: &str) -> String {
+fn parse_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => std::path::PathBuf::from("src"),
         false => std::path::PathBuf::from(root),
@@ -98,4 +97,14 @@ fn run_parse_check(root: &str) -> String {
         Ok(count) => format!("ok:parsed:{count}"),
         Err(err) => err,
     }
+}
+
+#[axon_pub_export]
+fn run_parse_check(root: &str) -> String {
+    parse_check_message(root)
+}
+
+#[axon_pub_export]
+fn parse_stage_failed(root: &str) -> bool {
+    parse_check_message(root).starts_with("error")
 }

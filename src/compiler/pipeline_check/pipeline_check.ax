@@ -1,36 +1,29 @@
 import
     compiler/backend
     compiler/bootstrap
-    compiler/proj { classify_check_target }
-    compiler/syntax/lexer { run_lex_check }
-    compiler/syntax/parser { run_parse_check }
+    compiler/diagnostics/diagnostics { diag_error, stage_should_abort }
+    compiler/syntax/lexer { run_lex_check, lex_stage_failed }
+    compiler/syntax/parser { run_parse_check, parse_stage_failed }
     compiler/semantics/check { run_semantic_project_check }
-    compiler/diagnostics/diagnostics { message_is_error, diag_error }
-    compiler { validate_ownership_invariants }
+    compiler/semantics/semantics { semantic_stage_failed }
+    compiler/ownership { ownership_stage_failed }
 
 pub func run_check_for_path(path: String) String
-    scope := classify_check_target(path)
-    if scope == "":
-        return diag_error("check", "empty check scope")
     bridge := bootstrap.check_bridge_readiness()
-    if message_is_error(bridge) == "yes":
+    if stage_should_abort(bridge):
         return diag_error("bridge", bridge)
     ffi := backend.validate_ffi_surface()
-    if message_is_error(ffi) == "yes":
+    if stage_should_abort(ffi):
         return diag_error("ffi", ffi)
     link := backend.validate_link_readiness()
-    if message_is_error(link) == "yes":
+    if stage_should_abort(link):
         return diag_error("link", link)
-    lexed := run_lex_check(path)
-    if message_is_error(lexed) == "yes":
-        return diag_error("lex", lexed)
-    parsed := run_parse_check(path)
-    if message_is_error(parsed) == "yes":
-        return diag_error("parse", parsed)
-    semantics := run_semantic_project_check(path)
-    if message_is_error(semantics) == "yes":
-        return diag_error("semantics", semantics)
-    own := validate_ownership_invariants()
-    if message_is_error(own) == "yes":
-        return diag_error("ownership", own)
+    if lex_stage_failed(path):
+        return diag_error("lex", run_lex_check(path))
+    if parse_stage_failed(path):
+        return diag_error("parse", run_parse_check(path))
+    if semantic_stage_failed(path):
+        return diag_error("semantics", run_semantic_project_check(path))
+    if ownership_stage_failed(""):
+        return diag_error("ownership", run_ownership_project_check(""))
     return "ok"

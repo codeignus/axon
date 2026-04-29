@@ -1018,8 +1018,7 @@ fn run_semantic_check(source: &str) -> String {
     "ok:semantic-snippet".to_string()
 }
 
-#[axon_pub_export]
-fn run_semantic_project_check(root: &str) -> String {
+fn semantic_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
         false => PathBuf::from(root),
@@ -1037,6 +1036,16 @@ fn run_semantic_project_check(root: &str) -> String {
         }
         Err(err) => err,
     }
+}
+
+#[axon_pub_export]
+fn run_semantic_project_check(root: &str) -> String {
+    semantic_check_message(root)
+}
+
+#[axon_pub_export]
+fn semantic_stage_failed(root: &str) -> bool {
+    semantic_check_message(root).starts_with("error")
 }
 
 #[axon_export]

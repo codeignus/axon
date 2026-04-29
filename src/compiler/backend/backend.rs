@@ -6,10 +6,15 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     if !lowered.starts_with("ok:lowered:") {
         return "error: lowering did not produce expected result".to_string();
     }
-    // Native artifact path: reuse the host-native backend pipeline as a strict
-    // external toolchain boundary until Axon-native MIR/backend fully owns it.
+    // Use vendored compiler workspace for self-independence.
+    // Falls back to rust-backed-compiler-for-axon if vendor not present.
     let workspace_root = std::path::Path::new(".");
-    let host_root = workspace_root.join("rust-backed-compiler-for-axon");
+    let host_root = workspace_root.join("rust-self-compiler-for-axon");
+    let host_root = if host_root.join("Cargo.toml").exists() {
+        host_root
+    } else {
+        workspace_root.join("rust-backed-compiler-for-axon")
+    };
     let host_target = host_root.join("target");
     let host_bin = host_target.join("debug/axon");
 
@@ -49,30 +54,50 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     if let Err(e) = std::fs::create_dir_all(out_dir) {
         return format!("error: cannot create {}: {e}", out_dir.display());
     }
-    let out_bin = out_dir.join("app");
+    let out_bin = out_dir.join("axon");
 
     let native_artifact = match resolve_native_artifact_path() {
         Some(p) => p,
         None => return "error: native artifact not found after build".to_string(),
     };
-    if let Err(e) = std::fs::copy(&native_artifact, &out_bin) {
-        return format!(
-            "error: cannot publish artifact {}: {e}",
-            out_bin.display()
-        );
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(e) =
-            std::fs::set_permissions(&out_bin, std::fs::Permissions::from_mode(0o755))
-        {
+
+    // Avoid "Text file busy" when overwriting the running executable:
+    // copy to a temp file first, then rename atomically.
+    let out_abs = std::fs::canonicalize(out_dir).unwrap_or_else(|_| out_dir.to_path_buf());
+    let exe_abs = std::env::current_exe().unwrap_or_default();
+    let is_self_overwrite = exe_abs.starts_with(&out_abs);
+
+    if is_self_overwrite {
+        let tmp_name = format!("axon.tmp.{}", std::process::id());
+        let tmp_path = out_dir.join(&tmp_name);
+        if let Err(e) = std::fs::copy(&native_artifact, &tmp_path) {
+            return format!("error: cannot stage artifact {}: {e}", tmp_path.display());
+        }
+        let new_path = out_dir.join("axon.new");
+        if let Err(e) = std::fs::rename(&tmp_path, &new_path) {
+            return format!("error: cannot publish artifact {}: {e}", new_path.display());
+        }
+    } else {
+        if let Err(e) = std::fs::copy(&native_artifact, &out_bin) {
             return format!(
-                "error: cannot set executable permissions on {}: {e}",
+                "error: cannot publish artifact {}: {e}",
                 out_bin.display()
             );
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) =
+                std::fs::set_permissions(&out_bin, std::fs::Permissions::from_mode(0o755))
+            {
+                return format!(
+                    "error: cannot set executable permissions on {}: {e}",
+                    out_bin.display()
+                );
+            }
+        }
     }
+
     let marker = out_dir.join("build-manifest.txt");
     let manifest = format!(
         "artifact\nstage=native-link\nsource-native={}\nout={}\nlowered={}\n",
@@ -89,7 +114,7 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
 
 #[axon_pub_export]
 fn launch_self_built() -> String {
-    let target = std::path::Path::new("target/build/axon/app");
+    let target = std::path::Path::new("target/build/axon/axon");
     if !target.exists() {
         return format!(
             "error: {} not found, run build first",
@@ -150,6 +175,63 @@ fn launch_self_built() -> String {
             "error: cannot execute {}: {e}",
             target.display()
         ),
+    }
+}
+
+/// Run tests via the vendored (or fallback) Rust compiler workspace.
+/// This makes `axon test` self-independent from any external host compiler.
+#[axon_pub_export]
+fn run_tests_via_rust_compiler(target: &str) -> String {
+    let workspace_root = std::path::Path::new(".");
+    let host_root = workspace_root.join("rust-self-compiler-for-axon");
+    let host_root = if host_root.join("Cargo.toml").exists() {
+        host_root
+    } else {
+        workspace_root.join("rust-backed-compiler-for-axon")
+    };
+    let host_target = host_root.join("target");
+    let host_bin = host_target.join("debug/axon");
+
+    if !host_bin.exists() {
+        let mut build_cmd = std::process::Command::new("cargo");
+        build_cmd.arg("build").arg("-p").arg("axon");
+        build_cmd.current_dir(&host_root);
+        build_cmd.env("CARGO_TARGET_DIR", &host_target);
+        match build_cmd.output() {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => {
+                return format!(
+                    "error: host compiler build failed: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                )
+            }
+            Err(e) => return format!("error: cannot build host compiler: {e}"),
+        }
+    }
+
+    let mut test_cmd = std::process::Command::new(&host_bin);
+    test_cmd.arg("test");
+    if !target.is_empty() {
+        test_cmd.arg(target);
+    }
+    test_cmd.current_dir(workspace_root);
+    test_cmd.env("CARGO_TARGET_DIR", &host_target);
+    match test_cmd.output() {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if out.status.success() {
+                let text = stdout.trim();
+                if text.is_empty() {
+                    "ok:tests:passed".to_string()
+                } else {
+                    text.to_string()
+                }
+            } else {
+                format!("error: tests failed: {}", stderr.trim())
+            }
+        }
+        Err(e) => format!("error: cannot run tests: {e}"),
     }
 }
 

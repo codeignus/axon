@@ -2,7 +2,8 @@
 
 ## Layout
 - Axon source: `src/`, `build.ax` (repo root)
-- Rust-backed compiler: `rust-backed-compiler-for-axon/` (host compiler, to be deprecated once self-compiler is complete)
+- Rust-backed compiler: `rust-backed-compiler-for-axon/` (bootstrap/host compiler)
+- Vendored compiler: `rust-self-compiler-for-axon/` (self-independent copy for build/test)
 - Docs: `docs/`
 
 ## Running Commands
@@ -23,6 +24,14 @@ cd rust-backed-compiler-for-axon && cargo run -p axon -- <command>
 ```
 CWD must be `rust-backed-compiler-for-axon/` so the host compiler finds `../src/` and `../build.ax`.
 
+## Self-Independence Architecture
+
+The `build` and `test` commands use a **vendored** copy of the Rust compiler workspace (`rust-self-compiler-for-axon/`) to achieve runtime independence from the original `rust-backed-compiler-for-axon/`. The fallback chain is:
+1. `rust-self-compiler-for-axon/` (vendored, self-contained)
+2. `rust-backed-compiler-for-axon/` (external bootstrap, fallback)
+
+The vendored workspace is kept in sync with the host compiler. When modifying the host compiler's Rust crates (lexer, parser, types, etc.), sync changes to the vendored copy.
+
 ## Bootstrap vs Self-Hosted Binary
 
 - **`cargo run -p axon --`** in `rust-backed-compiler-for-axon/` invokes the Rust-backed **host compiler** (frontend, MIR, codegen glue to LLVM and the linker). That build links and runs Axon IR as needed to produce **`target/build/axon/axon`** — the Axon-sources compiler artifact.
@@ -32,6 +41,8 @@ CWD must be `rust-backed-compiler-for-axon/` so the host compiler finds `../src/
 ## Axon Codegen Limitations
 - No `while`/`for` loops — use recursion
 - `->` is not valid Axon return type syntax. Use `func name() Type` not `func name() -> Type`
+- Logical operators: use `&&` and `||` (not `and`/`or` keywords)
+- **String FFI pattern**: when storing an FFI-returned `String` in a local and later comparing it with `==` against a literal, the self-hosted binary may crash. Use `bool`-returning FFI helpers (e.g., `stage_should_abort`, `lex_stage_failed`) for branching instead of comparing returned strings. This is a known codegen ownership gap for non-struct string locals.
 
 ## Principles
 - Minimal working code. No extra abstractions, no over-engineering, no speculative features

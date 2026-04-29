@@ -1,5 +1,5 @@
 import
-    compiler/diagnostics { message_is_error }
+    compiler/diagnostics/diagnostics { stage_should_abort }
 
 // Axon ownership model (language contract; enforcement in MIR + codegen).
 //
@@ -16,16 +16,16 @@ import
 
 pub func validate_ownership_invariants() String
     cond := validate_conditional_contract()
-    if message_is_error(cond) == "yes":
+    if stage_should_abort(cond):
         return cond
     merge := validate_escape_merge_contract()
-    if message_is_error(merge) == "yes":
+    if stage_should_abort(merge):
         return merge
     lifecycle := validate_lifecycle_contract()
-    if message_is_error(lifecycle) == "yes":
+    if stage_should_abort(lifecycle):
         return lifecycle
     project := run_ownership_project_check("")
-    if message_is_error(project) == "yes":
+    if stage_should_abort(project):
         return project
     return "ok"
 

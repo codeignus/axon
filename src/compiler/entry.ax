@@ -1,56 +1,56 @@
 import
-    compiler/backend { run_lowered_to_artifact, launch_self_built }
-    compiler/diagnostics { diag_error, message_is_error }
+    compiler/backend { run_lowered_to_artifact, launch_self_built, run_tests_via_rust_compiler }
+    compiler/diagnostics/diagnostics { diag_error, stage_should_abort }
     compiler/ir { lower_project }
-    compiler/pipeline_check { run_check_for_path, run_project_tests, run_fmt_target }
+    compiler/pipeline_check { run_check_for_path, run_fmt_target }
 
 pub func check(path: String) String
     return run_check_for_path(path)
 
 pub func build() String
     pre := run_check_for_path("")
-    if message_is_error(pre) == "yes":
+    if stage_should_abort(pre):
         return diag_error("check", pre)
     lowered := lower_project("")
-    if message_is_error(lowered) == "yes":
+    if stage_should_abort(lowered):
         return diag_error("lower", lowered)
     artifact := run_lowered_to_artifact(lowered)
-    if message_is_error(artifact) == "yes":
+    if stage_should_abort(artifact):
         return diag_error("artifact", artifact)
     return "ok"
 
 pub func run() String
     pre := run_check_for_path("")
-    if message_is_error(pre) == "yes":
+    if stage_should_abort(pre):
         return diag_error("check", pre)
     lowered := lower_project("")
-    if message_is_error(lowered) == "yes":
+    if stage_should_abort(lowered):
         return diag_error("lower", lowered)
     artifact := run_lowered_to_artifact(lowered)
-    if message_is_error(artifact) == "yes":
+    if stage_should_abort(artifact):
         return diag_error("artifact", artifact)
     launched := launch_self_built()
-    if message_is_error(launched) == "yes":
+    if stage_should_abort(launched):
         return diag_error("launch", launched)
     return "ok"
 
 pub func run_tests(target: String) String
     pre := run_check_for_path("")
-    if message_is_error(pre) == "yes":
+    if stage_should_abort(pre):
         return pre
-    return run_project_tests(target)
+    return run_tests_via_rust_compiler(target)
 
 pub func run_fmt(target: String) String
     return run_fmt_target(target)
 
 pub func self_bootstrap_gate() String
     first := build()
-    if message_is_error(first) == "yes":
+    if stage_should_abort(first):
         return diag_error("bootstrap-cycle-1", first)
     second := build()
-    if message_is_error(second) == "yes":
+    if stage_should_abort(second):
         return diag_error("bootstrap-cycle-2", second)
     checked := check("")
-    if message_is_error(checked) == "yes":
+    if stage_should_abort(checked):
         return diag_error("bootstrap-check", checked)
     return "ok"

@@ -60,8 +60,7 @@ fn walk_and_check_ownership(root: &Path) -> Result<usize, String> {
     Ok(checked)
 }
 
-#[axon_export]
-fn run_ownership_project_check(root: &str) -> String {
+fn ownership_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
         false => PathBuf::from(root),
@@ -70,4 +69,14 @@ fn run_ownership_project_check(root: &str) -> String {
         Ok(count) => format!("ok:ownership:{count}"),
         Err(err) => err,
     }
+}
+
+#[axon_pub_export]
+fn run_ownership_project_check(root: &str) -> String {
+    ownership_check_message(root)
+}
+
+#[axon_pub_export]
+fn ownership_stage_failed(root: &str) -> bool {
+    ownership_check_message(root).starts_with("error")
 }
