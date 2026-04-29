@@ -1,8 +1,75 @@
-// Native lexer helpers (incremental port). Keep sidecar checks for now.
+// Axon-native lexer. Tokenization truth lives here.
+// The sidecar (lexer.rs) handles file I/O; unknown-token rejection mirrors classify_token rules.
+pub func is_identifier_char(c: String) bool
+    if c == "_":
+        return true
+    byte := axon_string_byte_at(c, 0)
+    if byte >= 48 && byte <= 57:
+        return true
+    if byte >= 65 && byte <= 90:
+        return true
+    if byte >= 97 && byte <= 122:
+        return true
+    return false
+
+pub func is_digit_char(c: String) bool
+    byte := axon_string_byte_at(c, 0)
+    return byte >= 48 && byte <= 57
+
+pub func is_keyword(token: String) bool
+    if token == "func" || token == "pub" || token == "import" || token == "return":
+        return true
+    if token == "if" || token == "elif" || token == "else":
+        return true
+    if token == "mut" || token == "for" || token == "while" || token == "test":
+        return true
+    return false
+
+pub func classify_token(token: String) String
+    trimmed := axon_string_trim(token)
+    if trimmed == "":
+        return "empty"
+    if trimmed == ":=" || trimmed == "==" || trimmed == "!=" || trimmed == "<=" || trimmed == ">=":
+        return "operator"
+    first := axon_string_char_at(trimmed, 0)
+    if first == "\"":
+        return "string_literal"
+    if is_digit_char(first):
+        return "int_literal"
+    if first == "(" || first == ")" || first == "{" || first == "}" || first == "[" || first == "]":
+        return "delimiter"
+    if first == ":" || first == "," || first == ".":
+        return "delimiter"
+    if first == "=" || first == "!" || first == "<" || first == ">":
+        return "operator"
+    if first == "+" || first == "-" || first == "*" || first == "/":
+        return "operator"
+    if is_identifier_char(first):
+        if is_keyword(trimmed):
+            return "keyword"
+        if trimmed == "true" || trimmed == "false":
+            return "bool_literal"
+        return "identifier"
+    return "unknown"
+
+// Coarse count for Axon callers; project lex scans run in lexer.rs.
+pub func validate_tokens(source: String) String
+    if source == "":
+        return "ok:tokens:0"
+    trimmed := axon_string_trim(source)
+    if trimmed == "":
+        return "ok:tokens:0"
+    spaces := axon_string_count(trimmed, " ")
+    newlines := axon_string_count(trimmed, "\n")
+    tabs := axon_string_count(trimmed, "\t")
+    count := spaces + newlines + tabs + 1
+    return "ok:tokens:" + count
+
 pub func token_count_native(source: String) i64
     trimmed := axon_string_trim(source)
     if trimmed == "":
         return 0
     spaces := axon_string_count(trimmed, " ")
     newlines := axon_string_count(trimmed, "\n")
-    return spaces + newlines + 1
+    tabs := axon_string_count(trimmed, "\t")
+    return spaces + newlines + tabs + 1

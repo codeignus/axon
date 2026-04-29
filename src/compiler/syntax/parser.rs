@@ -1,3 +1,6 @@
+// String-aware delimiter balance matches `describe_parse`; `parser.ax`'s
+// `check_balance_simple` is a naive count helper only — project checks rely on this.
+// String-aware delimiter balance; `parser.ax`/`check_balance_simple` is naive-only.
 fn describe_parse_impl(source: &str) -> String {
     let mut stack: Vec<char> = Vec::new();
     let chars: Vec<char> = source.chars().collect();

@@ -1,0 +1,6 @@
+// Runtime proof that string `.len()` lowering works in the self-built test harness.
+pub func demo_string_len_via_method() i64
+    return "abc".len()
+
+test string_dot_len_returns_three
+    assert_eq(demo_string_len_via_method(), 3)

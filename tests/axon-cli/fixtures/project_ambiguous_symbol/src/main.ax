@@ -1,0 +1,6 @@
+import
+    mod_a { compute }
+
+func main() i64
+    compute()
+    return 0

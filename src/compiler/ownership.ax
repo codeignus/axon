@@ -1,52 +1,43 @@
 import
     compiler/diagnostics { message_is_error }
 
-// Ownership model sketch for the self-hosted Axon compiler.
-// This is intentionally lightweight and serves as executable documentation.
+// Axon ownership model (language contract; enforcement in MIR + codegen).
 //
-// Direction:
-// - FFI String returns should transfer ownership to Axon as ptr+len.
-// - Conditional expressions should NOT free at compare time.
-// - Once a branch is selected, that branch scope is responsible for
-//    releasing condition-owned temporaries exactly once.
-// - Values that escape conditional scope, especially `mut` bindings like
-//    `mut x` declared outside and reassigned inside branches, must preserve
-//    canonical ownership across the merge point. Branch-local temporaries may
-//    be consumed in-branch, but escaping owners/pointers are resolved at the
-//    post-branch merge using reverse-use data.
-// - Users never call dealloc/consume manually. The compiler/runtime owns
-//    this policy:
-//      - treat branch entry like function-param ownership routing
-//      - use reverse-use to decide canonical owner vs pointer
-//      - if a value has no remaining owner/use path, free at lexical-scope end
-//        single free, no user action.
+// Unified slot model (mut and non-mut):
+// - A binding is a slot (pointer to value). Readers get references; writes go through `mut`.
+// - Heap-owned values have a single canonical owner along each execution path: the last user
+//   (reverse-use “last survivor”) holds ownership and is responsible for deallocation.
 //
-// These hooks are no-ops today and mark where runtime ownership actions
-// will be implemented when ptr+len transfer and branch cleanup are wired.
+// Conditionals behave like inlined scopes with caller values “passed” in—outer bindings are inputs;
+// branches are analyzed independently (only one runs at runtime). Reassigning a `mut` slot in `if`
+// and again in `elif` is not two competing owners—it is updating the slot on mutually exclusive paths.
+// Enforcement: reverse-use assigns `MirFunc::owned_locals` per CFG path; see rust-backed-compiler-for-axon
+// `axon-codegen` crate (`llvm_backend` module docs: Conditionals and mut); do not replace with line-scan heuristics.
+//
+// FFI: String from Rust crosses as ptr+len; Axon becomes canonical owner once received.
+//
+// User code never calls manual free/dealloc; condition_* hooks below are intentional no-ops
+// documenting future codegen hooks—not user APIs.
 
 pub func ffi_string_transfer_contract() String
     return "ffi:string:transfer rust->axon ptr+len; free at canonical owner"
 
 pub func condition_scope_begin(owner: String) String
-    // Future: register `owner` as branch-condition owner.
     return owner
 
 pub func condition_scope_consume(scope: String, branch: String) void
-    // Future: release condition-owned values once branch is entered.
-    // This is where `cmd`/condition temporaries should be freed once.
     return
 
 pub func validate_conditional_ownership_contract() String
-    return "ok:ownership:conditional-branch-free"
+    return "ok:ownership:conditional-slot-model:last-survivor-in-codegen"
 
 pub func validate_escape_merge_contract() String
-    return "ok:ownership:escape-merge-canonical-owner"
+    return "ok:ownership:escape-merge-via-reverse-use-not-line-scan"
 
 pub func validate_user_no_manual_dealloc_contract() String
     return "ok:ownership:compiler-managed-lifecycle"
 
 pub func validate_ownership_invariants() String
-    // Validate the ownership contract in phases to keep stage errors actionable.
     cond := validate_conditional_ownership_contract()
     if message_is_error(cond) == "yes":
         return cond

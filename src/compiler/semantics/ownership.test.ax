@@ -1,4 +1,5 @@
-// Ownership contract tests: user code must not perform manual memory release.
+// Ownership contract tests: forbid manual release; conditional mut follows slot/last-survivor model.
+
 test ownership_snippet_flags_manual_free
     got := analyze_ownership("free(x)")
     assert_eq(message_is_error(got), "yes")
@@ -10,3 +11,23 @@ test ownership_snippet_accepts_regular_assignment
 test ownership_snippet_flags_condition_scope_begin
     got := analyze_ownership("condition_scope_begin(cmd)")
     assert_eq(message_is_error(got), "yes")
+
+// Mut reassigned on both if and elif is valid — mutually exclusive paths; ownership is codegen.
+test ownership_snippet_accepts_mut_on_both_condition_branches
+    source := "mut x := \"hello\"\nif cmd == \"a\":\n    x := \"b\"\nelif cmd == \"c\":\n    x := \"d\"\n"
+    got := analyze_ownership(source)
+    assert_eq(message_is_error(got), "no")
+
+test ownership_snippet_accepts_single_branch_mut_reassignment
+    source := "mut x := \"hello\"\nif cmd == \"a\":\n    x := \"b\"\n"
+    got := analyze_ownership(source)
+    assert_eq(message_is_error(got), "no")
+
+test ownership_snippet_flags_manual_dealloc
+    got := analyze_ownership("dealloc(ptr)")
+    assert_eq(message_is_error(got), "yes")
+
+test ownership_snippet_accepts_non_mut_conditional
+    source := "x := \"hello\"\nif x == \"world\":\n    print(x)\n"
+    got := analyze_ownership(source)
+    assert_eq(message_is_error(got), "no")

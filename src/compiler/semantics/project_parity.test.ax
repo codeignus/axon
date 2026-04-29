@@ -17,3 +17,15 @@ test semantic_project_check_arg_type_mismatch_fixture_fails
 test semantic_project_check_duplicate_alias_fixture_fails
     got := run_semantic_project_check("tests/axon-cli/fixtures/project_duplicate_alias/src")
     assert_eq(message_is_error(got), "yes")
+
+test semantic_project_check_ambiguous_import_fixture_fails
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_ambiguous_import/src")
+    assert_eq(message_is_error(got), "yes")
+
+test semantic_project_check_disambiguated_import_passes
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_ambiguous_symbol/src")
+    assert_eq(message_is_error(got), "no")
+
+test semantic_project_check_private_cross_module_fails
+    got := run_semantic_project_check("tests/axon-cli/fixtures/project_private_cross_mod/src")
+    assert_eq(message_is_error(got), "yes")

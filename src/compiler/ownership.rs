@@ -1,6 +1,10 @@
 // Project-wide ownership scan (directory walk). Lives beside `ownership.ax` so the
 // symbol shares module `compiler` with `validate_ownership_invariants` without
 // importing the whole `compiler/semantics` graph.
+//
+// Policy-only checks live here (forbidden APIs). Conditional `mut`/merge behavior is
+// not implemented as line-scan heuristics: `mut`/`non-mut` sharing the last-survivor
+// model lives in MIR lowering / codegen (`owned_locals`, reverse-use).
 
 fn check_file_ownership(path: &Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)

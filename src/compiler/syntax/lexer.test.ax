@@ -1,0 +1,97 @@
+// Golden token classification tests for the Axon-native lexer.
+
+test classify_keyword_func
+    got := classify_token("func")
+    assert_eq(got, "keyword")
+
+test classify_keyword_if
+    got := classify_token("if")
+    assert_eq(got, "keyword")
+
+test classify_keyword_return
+    got := classify_token("return")
+    assert_eq(got, "keyword")
+
+test classify_identifier
+    got := classify_token("my_function")
+    assert_eq(got, "identifier")
+
+test classify_string_literal
+    got := classify_token("\"hello world\"")
+    assert_eq(got, "string_literal")
+
+test classify_int_literal
+    got := classify_token("42")
+    assert_eq(got, "int_literal")
+
+test classify_bool_literal_true
+    got := classify_token("true")
+    assert_eq(got, "bool_literal")
+
+test classify_bool_literal_false
+    got := classify_token("false")
+    assert_eq(got, "bool_literal")
+
+test classify_delimiter_paren_open
+    got := classify_token("(")
+    assert_eq(got, "delimiter")
+
+test classify_delimiter_brace_close
+    got := classify_token("}")
+    assert_eq(got, "delimiter")
+
+test classify_operator_equals
+    got := classify_token("==")
+    assert_eq(got, "operator")
+
+test classify_operator_assign
+    got := classify_token(":=")
+    assert_eq(got, "operator")
+
+test classify_operator_plus
+    got := classify_token("+")
+    assert_eq(got, "operator")
+
+test classify_empty
+    got := classify_token("")
+    assert_eq(got, "empty")
+
+test classify_unknown
+    got := classify_token("@")
+    assert_eq(got, "unknown")
+
+test is_identifier_char_letter
+    got := is_identifier_char("a")
+    assert_eq(got, true)
+
+test is_identifier_char_underscore
+    got := is_identifier_char("_")
+    assert_eq(got, true)
+
+test is_identifier_char_digit
+    got := is_identifier_char("5")
+    assert_eq(got, true)
+
+test is_identifier_char_symbol
+    got := is_identifier_char("+")
+    assert_eq(got, false)
+
+test is_keyword_mut
+    got := is_keyword("mut")
+    assert_eq(got, true)
+
+test is_keyword_while
+    got := is_keyword("while")
+    assert_eq(got, true)
+
+test is_not_keyword_variable
+    got := is_keyword("my_var")
+    assert_eq(got, false)
+
+test token_count_empty
+    got := token_count_native("")
+    assert_eq(got, 0)
+
+test token_count_simple
+    got := token_count_native("func main()")
+    assert_eq(got, 3)
