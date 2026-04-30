@@ -457,33 +457,10 @@ pub func lex_single_token(source: String, pos: i64) String
         return lex_identifier_or_keyword(source, pos)
     return lex_operator(source, pos)
 
-// --- Full source tokenization ---
-
-func collect_tokens(source: String, pos: i64, acc: String) String
-    len := string_len(source)
-    if pos >= len:
-        eof := token_make(TOKEN_EOF(), "", pos, pos)
-        if acc == "":
-            return eof
-        return acc + "\n" + eof
-    tok := lex_single_token(source, pos)
-    kind := token_kind(tok)
-    end := token_end(tok)
-    if kind == "error":
-        if acc == "":
-            return tok
-        return acc + "\n" + tok
-    if end <= pos:
-        return acc
-    new_acc := ""
-    if acc == "":
-        new_acc = tok
-    else:
-        new_acc = acc + "\n" + tok
-    return collect_tokens(source, end, new_acc)
+// --- Full source tokenization (delegates to Rust lexer for Phase 1 parity with `run_lex_check`) ---
 
 pub func lex_all_tokens(source: String) String
-    return collect_tokens(source, 0, "")
+    return axon_lex_token_stream(source)
 
 // --- Indent level counting ---
 

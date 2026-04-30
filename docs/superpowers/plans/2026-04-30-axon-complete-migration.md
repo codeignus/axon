@@ -133,10 +133,10 @@ Expected: parity script runs and reports "no parity diff" for the fixtures alrea
 - Test: `src/compiler/syntax/lexer.test.ax` + ported fixtures from reference `lexer/tests.rs`.
 
 **Tasks:**
-- [x] **Lex pass alignment:** `lexer.rs` mirrors `lexer.ax`'s operator/keyword/word splitting and rejects unterminated literals/comments (**active check path uses `lexer.rs`** until Axon FFI can consume `lex_all_tokens`).
-- [x] **`validate_tokens` / `token_count_native`** now count real lexer output via `lex_all_tokens` (`lexer.ax`).
-- [ ] Port **indent/dedent**, raw `@rust`/`@go` blocks, f-strings from `axon-frontend` lexer into **`lexer.ax`** + wire check path to Axon-produced token stream via FFI (`lexer.rs` file walk only).
-- [ ] LANG-GAP primitives as needed (`lexer.rs`).
+- [x] **Full lexer parity (Phase 1 done):** `lexer.rs::Lexer` mirrors axon-frontend: indent stack, bracket depth, newline-in-parens, raw `@rust`/`@go`…`@end`, `f"…"`, `_` in numbers, newline-in-string error. **`axon_lex_token_stream`** is the FFI used by **`lex_all_tokens`** in `lexer.ax` so tests and tooling share one tokenizer.
+- [x] **`validate_tokens` / `token_count_native`** use **`lex_all_tokens`** → same stream.
+- [x] **Tests:** `lexer.test.ax` covers indent/dedent/raw/fstring via `lex_all_tokens`.
+- LANG-GAP: only if parity gaps appear on specific fixtures (`lexer.rs`).
 
 **Verification:**
 ```bash

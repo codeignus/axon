@@ -94,7 +94,8 @@ test token_count_empty
 
 test token_count_simple
     got := token_count_native("func main()")
-    assert_eq(got, 3)
+    // Full lexer: identifiers and delimiters emit separate tokens, stream ends with `eof`.
+    assert_eq(got, 7)
 
 test token_make_extract_kind
     t := token_make("ident", "foo", 0, 3)
@@ -270,7 +271,7 @@ test lex_single_token_minus_eq
 
 test lex_all_tokens_simple
     tokens := lex_all_tokens("func main()")
-    first := token_kind(lex_single_token(tokens, 0))
+    first := token_kind(token_at(tokens, 0))
     assert_eq(first, "kw_func")
 
 test lex_all_tokens_empty_source
@@ -278,9 +279,36 @@ test lex_all_tokens_empty_source
     assert_eq(token_kind(tokens), "eof")
 
 test lex_all_tokens_func_decl
-    tokens := lex_all_tokens("pub func foo()")
+    tokens := lex_all_tokens("pub func foo()\n")
     lines := axon_string_count(tokens, "\n")
-    assert_eq(lines + 1, 6)
+    assert_eq(lines + 1, 7)
+
+test lex_all_tokens_emits_indent_dedent_eof
+    s := "func f() Int\n    return 1\n"
+    tokens := lex_all_tokens(s)
+    assert_eq(axon_string_contains(tokens, "indent"), true)
+    assert_eq(axon_string_contains(tokens, "dedent"), true)
+    assert_eq(axon_string_contains(tokens, "newline"), true)
+
+test lex_raw_rust_end_block
+    s := "@rust\nfn hi() {}\n@end\n"
+    tokens := lex_all_tokens(s)
+    assert_eq(axon_string_contains(tokens, "raw_block"), true)
+    assert_eq(axon_string_contains(tokens, "kw_rust"), true)
+
+test lex_raw_go_end_block_matches_reference_frontend
+    s := "@go\nfunc fortyTwo() int32 { return 42 }\n@end"
+    tokens := lex_all_tokens(s)
+    assert_eq(token_kind(token_at(tokens, 0)), "at")
+    assert_eq(token_text(token_at(tokens, 0)), "@")
+    assert_eq(token_kind(token_at(tokens, 1)), "kw_go")
+    assert_eq(token_kind(token_at(tokens, 2)), "raw_block")
+    assert_eq(token_kind(token_at(tokens, 3)), "eof")
+
+test lex_fstring_token
+    s := "f\"a{b}\""
+    tokens := lex_all_tokens(s)
+    assert_eq(axon_string_contains(tokens, "fstring_start"), true)
 
 // --- Indent level tests ---
 

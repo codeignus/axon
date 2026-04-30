@@ -1,71 +1,5 @@
-// Sidecar: file I/O + lex pass that mirrors `lexer.ax` (`lex_single_token` / `collect_tokens`).
-// Policy (keyword set, operators) stays aligned with Axon lexer; Rust only walks bytes/chars here.
-
-#[inline]
-fn is_ident_continue(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
-}
-
-fn keyword_kind(text: &str) -> Option<&'static str> {
-    match text {
-        "func" => Some("kw_func"),
-        "method" => Some("kw_method"),
-        "type" => Some("kw_type"),
-        "struct" => Some("kw_struct"),
-        "enum" => Some("kw_enum"),
-        "trait" => Some("kw_trait"),
-        "error" => Some("kw_error"),
-        "test" => Some("kw_test"),
-        "mut" => Some("kw_mut"),
-        "if" => Some("kw_if"),
-        "elif" => Some("kw_elif"),
-        "else" => Some("kw_else"),
-        "for" => Some("kw_for"),
-        "in" => Some("kw_in"),
-        "while" => Some("kw_while"),
-        "break" => Some("kw_break"),
-        "continue" => Some("kw_continue"),
-        "match" => Some("kw_match"),
-        "return" => Some("kw_return"),
-        "ref" => Some("kw_ref"),
-        "async" => Some("kw_async"),
-        "await" => Some("kw_await"),
-        "shared" => Some("kw_shared"),
-        "buffer" => Some("kw_buffer"),
-        "defer" => Some("kw_defer"),
-        "errdefer" => Some("kw_errdefer"),
-        "self" => Some("kw_self"),
-        "and" => Some("kw_and"),
-        "or" => Some("kw_or"),
-        "not" => Some("kw_not"),
-        "nil" => Some("kw_nil"),
-        "try" => Some("kw_try"),
-        "catch" => Some("kw_catch"),
-        "orelse" => Some("kw_orelse"),
-        "ordefault" => Some("kw_ordefault"),
-        "import" => Some("kw_import"),
-        "include" => Some("kw_include"),
-        "pub" => Some("kw_pub"),
-        "project" => Some("kw_project"),
-        "bin" => Some("kw_bin"),
-        "deps" => Some("kw_deps"),
-        "rust" => Some("kw_rust"),
-        "rust_deps" => Some("kw_rust_deps"),
-        "go" => Some("kw_go"),
-        "go_deps" => Some("kw_go_deps"),
-        "python_deps" => Some("kw_python_deps"),
-        "end" => Some("kw_end"),
-        _ => None,
-    }
-}
-
-fn peek_byte(chars: &[char], pos: usize) -> Option<u8> {
-    chars.get(pos).and_then(|c| {
-        let mut buf = [0u8; 4];
-        c.encode_utf8(&mut buf);
-        buf.first().copied()
-    })
-}
+// Full lexer: indent/dedent, parens/brackets/braces depth, `@rust`|`@go` + `@end` raw,
+// `f"..."`, numeric `_`, newline-in-string error. Mirrors deprecioated axon-frontend lexer.
 
 fn line_col_at_byte(source: &str, byte_off: usize) -> (usize, usize) {
     let slice = source.get(..byte_off.min(source.len())).unwrap_or("");
@@ -82,267 +16,731 @@ fn line_col_at_byte(source: &str, byte_off: usize) -> (usize, usize) {
     (line, col)
 }
 
-fn char_idx_byte_offset(chars: &[char], char_idx: usize) -> usize {
-    chars[..char_idx].iter().map(|c| c.len_utf8()).sum()
+fn lex_err(source: &str, byte_off: usize, msg: impl AsRef<str>) -> String {
+    let (l, c) = line_col_at_byte(source, byte_off.min(source.len()));
+    format!("{}:{}: lex: {}", l, c, msg.as_ref())
 }
 
-/// Returns (token_kind_or_error, exclusive end **char index**).
-fn lex_single(chars: &[char], pos: usize, source: &str) -> Result<(String, usize), String> {
-    let len = chars.len();
-    if pos >= len {
-        return Ok(("eof".to_string(), pos));
-    }
-    let c = chars[pos];
+fn esc_pipe(s: &str) -> String {
+    s.replace('|', "\\u007c")
+}
 
-    // skip spaces/tabs (match `lex_skip_whitespace` recurse)
-    if c == ' ' || c == '\t' {
-        let mut p = pos;
-        while p < len && (chars[p] == ' ' || chars[p] == '\t') {
-            p += 1;
-        }
-        return lex_single(chars, p, source);
-    }
+fn tok(kind: &str, text: &str, sb: usize, eb: usize) -> String {
+    format!("{}|{}|{}|{}", kind, esc_pipe(text), sb, eb)
+}
 
-    if c == '\n' {
-        return Ok(("newline".to_string(), pos + 1));
-    }
-    if c == '\r' {
-        if pos + 1 < len && chars[pos + 1] == '\n' {
-            return Ok(("newline".to_string(), pos + 2));
-        }
-        return Ok(("newline".to_string(), pos + 1));
-    }
+fn tok_kind(line: &str) -> &str {
+    line.split('|').next().unwrap_or("")
+}
 
-    if c == '"' {
-        let mut p = pos + 1;
-        while p < len {
-            match chars[p] {
-                '\\' => {
-                    p = p.saturating_add(2);
-                    continue;
-                }
-                '"' => {
-                    p += 1;
-                    return Ok(("string".to_string(), p));
-                }
-                _ => p += 1,
-            }
-        }
-        return Ok(("error".to_string(), len));
-    }
-
-    if c == '\'' {
-        let mut p = pos + 1;
-        if p < len && chars[p] == '\\' {
-            p = p.saturating_add(2);
-        } else if p < len {
-            p += 1;
-        }
-        if p < len && chars[p] == '\'' {
-            p += 1;
-        }
-        return Ok(("char".to_string(), p));
-    }
-
-    if c == '/' && pos + 1 < len {
-        let nxt = chars[pos + 1];
-        if nxt == '/' {
-            let mut p = pos + 2;
-            while p < len && chars[p] != '\n' {
-                p += 1;
-            }
-            return Ok(("comment".to_string(), p));
-        }
-        if nxt == '*' {
-            let mut p = pos + 2;
-            while p < len {
-                if chars[p] == '*' && p + 1 < len && chars[p + 1] == '/' {
-                    p += 2;
-                    return Ok(("comment".to_string(), p));
-                }
-                p += 1;
-            }
-            return Ok(("error".to_string(), len));
-        }
-    }
-
-    if peek_byte(chars, pos).is_some_and(|b| (b'0'..=b'9').contains(&b)) {
-        let mut p = pos;
-        while p < len {
-            let b = peek_byte(chars, p).unwrap_or(0);
-            if !(b'0'..=b'9').contains(&b) {
-                break;
-            }
-            p += 1;
-        }
-        if p < len && chars[p] == '.' {
-            let next = p + 1;
-            if next < len {
-                let nb = peek_byte(chars, next).unwrap_or(0);
-                if (b'0'..=b'9').contains(&nb) {
-                    p = next;
-                    while p < len {
-                        let b = peek_byte(chars, p).unwrap_or(0);
-                        if !(b'0'..=b'9').contains(&b) {
-                            break;
-                        }
-                        p += 1;
-                    }
-                    return Ok(("float".to_string(), p));
-                }
-            }
-        }
-        return Ok(("int".to_string(), p));
-    }
-
-    if c.is_ascii_alphabetic() || c == '_' {
-        let mut p = pos;
-        while p < len && is_ident_continue(chars[p]) {
-            p += 1;
-        }
-        let text: String = chars[pos..p].iter().collect();
-        if let Some(kind) = keyword_kind(&text) {
-            let k = if text == "true" || text == "false" {
-                "bool".to_string()
-            } else {
-                kind.to_string()
-            };
-            return Ok((k, p));
-        }
-        if text == "true" || text == "false" {
-            return Ok(("bool".to_string(), p));
-        }
-        if text == "nil" {
-            return Ok(("kw_nil".to_string(), p));
-        }
-        return Ok(("ident".to_string(), p));
-    }
-
-    // operators / punctuation (mirror `lex_operator`)
-    match c {
-        ':' => {
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("colon_eq".to_string(), pos + 2));
-            }
-            return Ok(("colon".to_string(), pos + 1));
-        }
-        '=' => {
-            if pos + 1 < len && chars[pos + 1] == '>' {
-                return Ok(("fat_arrow".to_string(), pos + 2));
-            }
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("eq".to_string(), pos + 2));
-            }
-            return Ok(("assign".to_string(), pos + 1));
-        }
-        '!' => {
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("ne".to_string(), pos + 2));
-            }
-            return Ok(("bang".to_string(), pos + 1));
-        }
-        '<' => {
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("le".to_string(), pos + 2));
-            }
-            return Ok(("lt".to_string(), pos + 1));
-        }
-        '>' => {
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("ge".to_string(), pos + 2));
-            }
-            return Ok(("gt".to_string(), pos + 1));
-        }
-        '+' => {
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("plus_eq".to_string(), pos + 2));
-            }
-            return Ok(("plus".to_string(), pos + 1));
-        }
-        '-' => {
-            if pos + 1 < len && chars[pos + 1] == '=' {
-                return Ok(("minus_eq".to_string(), pos + 2));
-            }
-            return Ok(("minus".to_string(), pos + 1));
-        }
-        '*' => return Ok(("star".to_string(), pos + 1)),
-        '/' => return Ok(("slash".to_string(), pos + 1)),
-        '%' => return Ok(("percent".to_string(), pos + 1)),
-        '&' => {
-            if pos + 1 < len && chars[pos + 1] == '&' {
-                return Ok(("andand".to_string(), pos + 2));
-            }
-            return Ok(("amp".to_string(), pos + 1));
-        }
-        '|' => {
-            if pos + 1 < len && chars[pos + 1] == '|' {
-                return Ok(("oror".to_string(), pos + 2));
-            }
-            return Ok(("pipe".to_string(), pos + 1));
-        }
-        '.' => {
-            if pos + 1 < len && chars[pos + 1] == '.' {
-                return Ok(("dot_dot".to_string(), pos + 2));
-            }
-            return Ok(("dot".to_string(), pos + 1));
-        }
-        ',' => return Ok(("comma".to_string(), pos + 1)),
-        ';' => return Ok(("semi".to_string(), pos + 1)),
-        '?' => return Ok(("question".to_string(), pos + 1)),
-        '(' => return Ok(("lparen".to_string(), pos + 1)),
-        ')' => return Ok(("rparen".to_string(), pos + 1)),
-        '[' => return Ok(("lbrack".to_string(), pos + 1)),
-        ']' => return Ok(("rbrack".to_string(), pos + 1)),
-        '{' => return Ok(("lbrace".to_string(), pos + 1)),
-        '}' => return Ok(("rbrace".to_string(), pos + 1)),
-        '@' => return Ok(("at".to_string(), pos + 1)),
-        _ => {
-            let byte = char_idx_byte_offset(chars, pos);
-            let (line, col) = line_col_at_byte(source, byte);
-            return Err(format!(
-                "{}:{}: lex: error token {:?}",
-                line,
-                col,
-                chars[pos]
-            ));
-        }
+fn kw_kind(ident: &str) -> &'static str {
+    match ident {
+        "func" => "kw_func",
+        "method" => "kw_method",
+        "type" => "kw_type",
+        "struct" => "kw_struct",
+        "enum" => "kw_enum",
+        "trait" => "kw_trait",
+        "error" => "kw_error",
+        "test" => "kw_test",
+        "mut" => "kw_mut",
+        "if" => "kw_if",
+        "elif" => "kw_elif",
+        "else" => "kw_else",
+        "for" => "kw_for",
+        "in" => "kw_in",
+        "while" => "kw_while",
+        "break" => "kw_break",
+        "continue" => "kw_continue",
+        "match" => "kw_match",
+        "return" => "kw_return",
+        "ref" => "kw_ref",
+        "async" => "kw_async",
+        "await" => "kw_await",
+        "shared" => "kw_shared",
+        "buffer" => "kw_buffer",
+        "defer" => "kw_defer",
+        "errdefer" => "kw_errdefer",
+        "true" | "false" => "bool",
+        "self" => "kw_self",
+        "and" => "kw_and",
+        "or" => "kw_or",
+        "not" => "kw_not",
+        "nil" => "kw_nil",
+        "try" => "kw_try",
+        "catch" => "kw_catch",
+        "orelse" => "kw_orelse",
+        "ordefault" => "kw_ordefault",
+        "import" => "kw_import",
+        "include" => "kw_include",
+        "pub" => "kw_pub",
+        "project" => "kw_project",
+        "bin" => "kw_bin",
+        "deps" => "kw_deps",
+        "rust_deps" => "kw_rust_deps",
+        "go_deps" => "kw_go_deps",
+        "python_deps" => "kw_python_deps",
+        "rust" => "kw_rust",
+        "go" => "kw_go",
+        "end" => "kw_end",
+        _ => "ident",
     }
 }
 
-fn collect_tokens(chars: &[char], source: &str) -> Result<usize, String> {
-    let mut pos = 0usize;
-    let mut tokens = 0usize;
-    loop {
-        let (kind, end) = lex_single(chars, pos, source)?;
-        if kind == "error" {
-            let byte = char_idx_byte_offset(chars, pos);
-            let (line, col) = line_col_at_byte(source, byte);
-            return Err(format!(
-                "{}:{}: lex: unterminated string or comment",
-                line, col
-            ));
+struct Lexer<'a> {
+    source: &'a str,
+    chars: Vec<char>,
+    byte_off: Vec<usize>,
+    pos: usize,
+    indent_stack: Vec<u32>,
+    paren_depth: u32,
+    at_line_start: bool,
+    pending: Vec<String>,
+}
+
+impl<'a> Lexer<'a> {
+    fn new(source: &'a str) -> Self {
+        let mut chars = Vec::new();
+        let mut byte_off = Vec::new();
+        let mut b = 0usize;
+        for c in source.chars() {
+            byte_off.push(b);
+            b += c.len_utf8();
+            chars.push(c);
         }
-        tokens += 1;
-        if kind == "eof" {
+        Self {
+            source,
+            chars,
+            byte_off,
+            pos: 0,
+            indent_stack: vec![0],
+            paren_depth: 0,
+            at_line_start: true,
+            pending: Vec::new(),
+        }
+    }
+
+    fn b_ci(&self, ci: usize) -> usize {
+        *self.byte_off.get(ci.min(self.chars.len())).unwrap_or(&self.source.len())
+    }
+
+    fn peek(&self) -> Option<char> {
+        self.chars.get(self.pos).copied()
+    }
+
+    fn peek_at(&self, off: usize) -> Option<char> {
+        self.chars.get(self.pos + off).copied()
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        let c = self.peek()?;
+        self.pos += 1;
+        Some(c)
+    }
+
+    fn skip_inline_ws(&mut self) {
+        while matches!(self.peek(), Some(' ') | Some('\t')) {
+            self.advance();
+        }
+    }
+
+    fn count_indent(&mut self) -> u32 {
+        let mut n: u32 = 0;
+        loop {
+            match self.peek() {
+                Some(' ') => {
+                    self.advance();
+                    n += 1;
+                }
+                Some('\t') => {
+                    self.advance();
+                    n = (n / 4 + 1) * 4;
+                }
+                _ => break,
+            }
+        }
+        n
+    }
+
+    fn handle_line_start(&mut self) -> Result<(), String> {
+        if self.paren_depth > 0 {
+            self.skip_inline_ws();
+            self.at_line_start = false;
+            return Ok(());
+        }
+        loop {
+            if self.pos >= self.chars.len() {
+                self.at_line_start = false;
+                return Ok(());
+            }
+            if self.peek() == Some('\n') {
+                self.advance();
+                continue;
+            }
+            self.skip_inline_ws();
+            if self.peek() == Some('/') && self.peek_at(1) == Some('/') {
+                let sb = self.b_ci(self.pos);
+                self.advance();
+                self.advance();
+                while self.peek() != None && self.peek() != Some('\n') {
+                    self.advance();
+                }
+                let eb = self.b_ci(self.pos);
+                let snippet = self
+                    .source
+                    .get(sb.min(self.source.len())..eb.min(self.source.len()))
+                    .unwrap_or("")
+                    .trim();
+                self.pending.push(tok("comment", snippet, sb, eb));
+                continue;
+            }
             break;
         }
-        if end <= pos && kind != "eof" {
-            let byte = char_idx_byte_offset(chars, pos);
-            let (line, col) = line_col_at_byte(source, byte);
-            return Err(format!(
-                "{}:{}: lex: lexer made no progress",
-                line,
-                col
-            ));
+
+        let indent = self.count_indent();
+        let cur = *self.indent_stack.last().unwrap();
+        if indent > cur {
+            self.indent_stack.push(indent);
+            let eb = self.b_ci(self.pos);
+            self.pending.push(tok("indent", "", eb, eb));
+        } else {
+            while self.indent_stack.len() > 1 && *self.indent_stack.last().unwrap() > indent {
+                self.indent_stack.pop();
+                let eb = self.b_ci(self.pos);
+                self.pending.push(tok("dedent", "", eb, eb));
+            }
+            if *self.indent_stack.last().unwrap() != indent {
+                let eb = self.b_ci(self.pos);
+                self.pending.push(tok("error", "inconsistent indentation", eb, eb));
+                self.indent_stack.push(indent);
+            }
         }
-        pos = end;
+        self.at_line_start = false;
+        Ok(())
     }
-    Ok(tokens)
+
+    fn read_string(&mut self, open_sb: usize) -> Result<String, String> {
+        self.advance(); // "
+        loop {
+            match self.peek() {
+                Some('"') => {
+                    self.advance();
+                    let eb = self.b_ci(self.pos);
+                    let txt = self
+                        .source
+                        .get(open_sb.min(self.source.len())..eb.min(self.source.len()))
+                        .unwrap_or("");
+                    return Ok(tok("string", txt, open_sb, eb));
+                }
+                Some('\\') => {
+                    self.advance();
+                    if self.advance().is_none() {
+                        return Err(lex_err(self.source, open_sb, "unterminated string"));
+                    }
+                }
+                Some('\n') | None => {
+                    return Err(lex_err(self.source, open_sb, "unterminated string"));
+                }
+                Some(_) => {
+                    self.advance();
+                }
+            }
+        }
+    }
+
+    fn read_fstring(&mut self, outer_sb: usize) -> Result<String, String> {
+        self.advance(); // f
+        if self.advance() != Some('"') {
+            return Err(lex_err(self.source, outer_sb, "invalid f-string"));
+        }
+        let mut depth = 0i32;
+        loop {
+            match self.peek() {
+                Some('"') if depth == 0 => {
+                    self.advance();
+                    let eb = self.b_ci(self.pos);
+                    let raw = self
+                        .source
+                        .get(outer_sb.min(self.source.len())..eb.min(self.source.len()))
+                        .unwrap_or("");
+                    return Ok(tok("fstring_start", raw, outer_sb, eb));
+                }
+                Some('{') => {
+                    depth += 1;
+                    self.advance();
+                }
+                Some('}') => {
+                    depth = depth.saturating_sub(1);
+                    self.advance();
+                }
+                Some('\\') => {
+                    self.advance();
+                    if self.advance().is_none() {
+                        return Err(lex_err(self.source, outer_sb, "unterminated f-string"));
+                    }
+                }
+                Some(_) => {
+                    self.advance();
+                }
+                None => return Err(lex_err(self.source, outer_sb, "unterminated f-string")),
+            }
+        }
+    }
+
+    fn read_number(&mut self, outer_sb: usize) -> Result<String, String> {
+        let start_c = self.pos;
+        while let Some(ch) = self.peek() {
+            if ch.is_ascii_digit() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let mut is_float = false;
+        if self.peek() == Some('.') && self.peek_at(1).is_some_and(|c| c.is_ascii_digit()) {
+            is_float = true;
+            self.advance();
+            while let Some(ch) = self.peek() {
+                if ch.is_ascii_digit() || ch == '_' {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        let end_b = self.b_ci(self.pos);
+        let raw: String = self.chars[start_c..self.pos].iter().collect();
+        let cleaned: String = raw.chars().filter(|c| *c != '_').collect();
+        if is_float {
+            Ok(tok("float", &cleaned, outer_sb, end_b))
+        } else {
+            Ok(tok("int", &cleaned, outer_sb, end_b))
+        }
+    }
+
+    fn read_identifier(&mut self, outer_sb: usize) -> String {
+        let sc = self.pos;
+        while let Some(ch) = self.peek() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let eb = self.b_ci(self.pos);
+        let txt: String = self.chars[sc..self.pos].iter().collect();
+        let k = kw_kind(&txt);
+        tok(k, &txt, outer_sb, eb)
+    }
+
+    fn read_line_comment_here(&mut self, sb: usize) -> String {
+        while self.peek() != None && self.peek() != Some('\n') {
+            self.advance();
+        }
+        let eb = self.b_ci(self.pos);
+        let snippet = self
+            .source
+            .get(sb.min(self.source.len())..eb.min(self.source.len()))
+            .unwrap_or("")
+            .trim();
+        tok("comment", snippet, sb, eb)
+    }
+
+    fn read_block_comment(&mut self, sb: usize) -> Result<String, String> {
+        self.advance(); // /
+        self.advance(); // *
+        loop {
+            match (self.peek(), self.peek_at(1)) {
+                (Some('*'), Some('/')) => {
+                    self.advance();
+                    self.advance();
+                    let eb = self.b_ci(self.pos);
+                    let t = self.source.get(sb..eb.min(self.source.len())).unwrap_or("");
+                    return Ok(tok("comment", t, sb, eb));
+                }
+                (Some(_), _) => self.advance(),
+                (None, _) => return Err(lex_err(self.source, sb, "unterminated block comment")),
+            }
+        }
+    }
+
+    fn read_char(&mut self, outer_sb: usize) -> Result<String, String> {
+        self.advance(); // '
+        match self.peek() {
+            Some('\\') => {
+                self.advance();
+                if self.advance().is_none() {
+                    return Err(lex_err(self.source, outer_sb, "unterminated char literal"));
+                }
+            }
+            Some('\'') => {
+                return Err(lex_err(self.source, outer_sb, "empty char literal"));
+            }
+            Some(_) => {
+                self.advance();
+            }
+            None => {
+                return Err(lex_err(self.source, outer_sb, "unterminated char literal"));
+            }
+        }
+        if self.peek() == Some('\'') {
+            self.advance();
+        }
+        let eb = self.b_ci(self.pos);
+        let raw = self
+            .source
+            .get(outer_sb.min(self.source.len())..eb.min(self.source.len()))
+            .unwrap_or("");
+        Ok(tok("char", raw, outer_sb, eb))
+    }
+
+    fn capture_raw_until_end(&mut self, content_sb: usize) -> Result<String, String> {
+        loop {
+            let b = self.b_ci(self.pos);
+            let suffix = self.source.get(b.min(self.source.len())..).unwrap_or("");
+            if suffix.starts_with("@end")
+                && (b == 0 || self.source.as_bytes().get(b.wrapping_sub(1)).map_or(false, |x| *x == b'\n'))
+            {
+                let at_end_b = b;
+                for expect in "@end".chars() {
+                    if Some(expect) != self.peek() {
+                        return Err(lex_err(self.source, b, "@end malformed"));
+                    }
+                    self.advance();
+                }
+                self.skip_inline_ws();
+                let end_byte = self.b_ci(self.pos);
+                let inner = self
+                    .source
+                    .get(content_sb.min(self.source.len())..at_end_b.min(self.source.len()))
+                    .unwrap_or("")
+                    .strip_prefix('\n')
+                    .unwrap_or("")
+                    .trim_end();
+                return Ok(tok(
+                    "raw_block",
+                    inner,
+                    content_sb.min(self.source.len()),
+                    end_byte.min(self.source.len()),
+                ));
+            }
+            if self.pos >= self.chars.len() {
+                return Err(lex_err(
+                    self.source,
+                    content_sb,
+                    "expected @end to close @rust block",
+                ));
+            }
+            self.advance();
+        }
+    }
+
+    fn lex_at_kw(&mut self) -> String {
+        let at_sb_byte = self.b_ci(self.pos);
+        self.advance(); // @
+        let after_at_byte = self.b_ci(self.pos);
+        let kw_sc = self.pos;
+        while let Some(ch) = self.peek() {
+            if ch.is_ascii_alphabetic() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let kw_eb_byte = self.b_ci(self.pos);
+        let txt: String = self.chars[kw_sc..self.pos].iter().collect();
+        let kind = kw_kind(&txt);
+        // Emit order: `@` then keyword (matching reference lexer queued tokens).
+        self.pending.push(tok(kind, &txt, after_at_byte, kw_eb_byte));
+        tok("at", "@", at_sb_byte, after_at_byte)
+    }
+
+    fn next_token(&mut self) -> Result<String, String> {
+        if !self.pending.is_empty() {
+            return Ok(self.pending.remove(0));
+        }
+        if self.at_line_start {
+            self.handle_line_start()?;
+            if !self.pending.is_empty() {
+                return Ok(self.pending.remove(0));
+            }
+        }
+
+        let sb = self.b_ci(self.pos);
+        match self.peek() {
+            None => {
+                while self.indent_stack.len() > 1 {
+                    self.indent_stack.pop();
+                    let eb = self.b_ci(self.pos.min(self.chars.len()));
+                    self.pending.push(tok("dedent", "", eb, eb));
+                }
+                if !self.pending.is_empty() {
+                    return Ok(self.pending.remove(0));
+                }
+                Ok(tok("eof", "", sb, sb))
+            }
+            Some('\n') => {
+                self.advance();
+                if self.paren_depth > 0 {
+                    self.skip_inline_ws();
+                    return self.next_token();
+                }
+                self.at_line_start = true;
+                Ok(tok("newline", "\n", sb, self.b_ci(self.pos)))
+            }
+            Some('\r') => {
+                if self.peek_at(1) == Some('\n') {
+                    self.advance();
+                    self.advance();
+                } else {
+                    self.advance();
+                }
+                if self.paren_depth > 0 {
+                    self.skip_inline_ws();
+                    return self.next_token();
+                }
+                self.at_line_start = true;
+                Ok(tok("newline", "\n", sb, self.b_ci(self.pos)))
+            }
+            Some(' ') | Some('\t') => {
+                self.skip_inline_ws();
+                self.next_token()
+            }
+            Some('/') if self.peek_at(1) == Some('/') => {
+                Ok(self.read_line_comment_here(sb))
+            }
+            Some('/') if self.peek_at(1) == Some('*') => self.read_block_comment(sb),
+            Some('"') => self.read_string(sb),
+            Some('f') if self.peek_at(1) == Some('"') => self.read_fstring(sb),
+            Some('\'') => self.read_char(sb),
+            Some(ch) if ch.is_ascii_digit() => self.read_number(sb),
+            Some(ch) if ch.is_ascii_alphabetic() || ch == '_' => Ok(self.read_identifier(sb)),
+            Some('@') => Ok(self.lex_at_kw()),
+            Some('(') => {
+                self.advance();
+                self.paren_depth += 1;
+                Ok(tok("lparen", "(", sb, self.b_ci(self.pos)))
+            }
+            Some(')') => {
+                self.advance();
+                self.paren_depth = self.paren_depth.saturating_sub(1);
+                Ok(tok("rparen", ")", sb, self.b_ci(self.pos)))
+            }
+            Some('[') => {
+                self.advance();
+                self.paren_depth += 1;
+                Ok(tok("lbrack", "[", sb, self.b_ci(self.pos)))
+            }
+            Some(']') => {
+                self.advance();
+                self.paren_depth = self.paren_depth.saturating_sub(1);
+                Ok(tok("rbrack", "]", sb, self.b_ci(self.pos)))
+            }
+            Some('{') => {
+                self.advance();
+                self.paren_depth += 1;
+                Ok(tok("lbrace", "{", sb, self.b_ci(self.pos)))
+            }
+            Some('}') => {
+                self.advance();
+                self.paren_depth = self.paren_depth.saturating_sub(1);
+                Ok(tok("rbrace", "}", sb, self.b_ci(self.pos)))
+            }
+            Some(':') => {
+                if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("colon_eq", ":=", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("colon", ":", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('=') => {
+                let t = if self.peek_at(1) == Some('>') {
+                    self.advance();
+                    self.advance();
+                    tok("fat_arrow", "=>", sb, self.b_ci(self.pos))
+                } else if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    tok("eq", "==", sb, self.b_ci(self.pos))
+                } else {
+                    self.advance();
+                    tok("assign", "=", sb, self.b_ci(self.pos))
+                };
+                Ok(t)
+            }
+            Some('!') => {
+                if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("ne", "!=", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("bang", "!", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('?') => {
+                self.advance();
+                Ok(tok("question", "?", sb, self.b_ci(self.pos)))
+            }
+            Some('<') => {
+                if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("le", "<=", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("lt", "<", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('>') => {
+                if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("ge", ">=", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("gt", ">", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('-') => {
+                if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("minus_eq", "-=", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("minus", "-", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('+') => {
+                if self.peek_at(1) == Some('=') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("plus_eq", "+=", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("plus", "+", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('*') => {
+                self.advance();
+                Ok(tok("star", "*", sb, self.b_ci(self.pos)))
+            }
+            Some('/') => {
+                self.advance();
+                Ok(tok("slash", "/", sb, self.b_ci(self.pos)))
+            }
+            Some('%') => {
+                self.advance();
+                Ok(tok("percent", "%", sb, self.b_ci(self.pos)))
+            }
+            Some('&') => {
+                if self.peek_at(1) == Some('&') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("andand", "&&", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("amp", "&", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('|') => {
+                if self.peek_at(1) == Some('|') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("oror", "||", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("pipe", "|", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some('.') => {
+                if self.peek_at(1) == Some('.') {
+                    self.advance();
+                    self.advance();
+                    Ok(tok("dot_dot", "..", sb, self.b_ci(self.pos)))
+                } else {
+                    self.advance();
+                    Ok(tok("dot", ".", sb, self.b_ci(self.pos)))
+                }
+            }
+            Some(',') => {
+                self.advance();
+                Ok(tok("comma", ",", sb, self.b_ci(self.pos)))
+            }
+            Some(';') => {
+                self.advance();
+                Ok(tok("semi", ";", sb, self.b_ci(self.pos)))
+            }
+            Some(ch) => Err(lex_err(
+                self.source,
+                sb,
+                format!("error token {:?}", ch),
+            )),
+        }
+    }
+
+    fn tokenize(mut self) -> Result<Vec<String>, String> {
+        let mut out = Vec::new();
+        loop {
+            let tok_line = self.next_token()?;
+            let kind = tok_kind(&tok_line);
+
+            let is_eof = kind == "eof";
+            let mut check_raw = kind == "kw_rust" || kind == "kw_go";
+            if kind == "at" && !self.pending.is_empty() {
+                let pk = tok_kind(&self.pending[0]);
+                check_raw = pk == "kw_rust" || pk == "kw_go";
+            }
+
+            out.push(tok_line);
+
+            while !self.pending.is_empty() {
+                let follow = self.pending.remove(0);
+                let fk = tok_kind(&follow);
+                out.push(follow);
+                if check_raw && (fk == "kw_rust" || fk == "kw_go") {
+                    let content_sb = self.b_ci(self.pos);
+                    if self.peek() == Some('\n') {
+                        self.advance();
+                        self.at_line_start = false;
+                    }
+                    out.push(self.capture_raw_until_end(content_sb)?);
+                    check_raw = false;
+                }
+            }
+
+            if is_eof {
+                break;
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// FFI for Axon callers: newline-separated tokens (kind|text|start_byte|end_byte).
+#[axon_export]
+fn axon_lex_token_stream(source: &str) -> String {
+    match Lexer::new(source).tokenize() {
+        Ok(v) => {
+            if v.iter().any(|t| tok_kind(t) == "error") {
+                return v.join("\n");
+            }
+            v.join("\n")
+        }
+        Err(e) => format!("error|{}|0|0", esc_pipe(&e)),
+    }
 }
 
 fn scan_lex_contract(source: &str) -> Result<usize, String> {
-    let chars: Vec<char> = source.chars().collect();
-    collect_tokens(&chars, source)
+    let out = Lexer::new(source).tokenize()?;
+    if let Some(bad) = out.iter().find(|t| tok_kind(t) == "error") {
+        return Err(bad.clone());
+    }
+    Ok(out.len())
 }
 
 fn check_file_for_lex(path: &std::path::Path) -> Result<(), String> {

@@ -38,6 +38,7 @@ While codegen/codegen-orchestration is still being ported, building the compiler
 
 Migration entry points already in this repo:
 
+- **`src/compiler/syntax/lexer.rs`** — **Phase 1 complete:** full lexer (indent/dedent, raw `@rust`/`@go`, f-strings, etc.) exposes **`axon_lex_token_stream`**; **`lexer.ax` `lex_all_tokens`** calls it so the Axon-visible token stream matches the check pipeline.
 - **`src/compiler/backend/axon_native_build/`** — small temporary Cargo package under `src/` that exposes a CLI driver (`axon-native-build`). It links the reference `axon-codegen` library via path until the equivalent logic moves into `*.ax` + sidecars. It is **not** another compiler project; it is internal scaffolding that gets deleted at the end of Phase 8 of the migration plan.
 - **`src/compiler/backend/backend.rs`** — invokes that driver for native `check`/`build`/`test`. It does **not** subprocess any second `axon` CLI and does **not** point at any other compiler workspace.
 - **`AXON_NATIVE_BUILD_BIN`** — optional env var that points `backend.rs` at a prebuilt driver binary so it can skip rebuilding.
