@@ -1,0 +1,5 @@
+project private_cross_mod
+    version: "0.1.0"
+
+bin private_cross_mod
+    main: "./src/main.ax"

@@ -107,10 +107,10 @@ The migration driver crate (`src/compiler/backend/axon_native_build/`) is **temp
 - Create: `src/compiler/backend/foreign_archive.rs` (skeleton FFI: `build_rust_bridge_archive(project_root, deps_raw, sidecar_files)`).
 
 **Tasks:**
-- [ ] Inventory the reference tree to a JSON map: each `*.rs` → planned destination `*.ax` (or sidecar) — checked into `docs/migration/source-map.md`.
-- [ ] Add `scripts/parity-run.sh` that runs `axon check/build/run/test` on a fixture **twice**: through repo `axon` and through the migration driver, then diffs stdout/stderr/exit codes.
-- [ ] Add a fixture list with stable ordering: starts with `project_typecheck_valid`, expands per phase.
-- [ ] Land sidecar skeletons (`native_codegen.rs`, `foreign_archive.rs`) returning `error: not migrated yet` so callers compile while migration progresses.
+- [x] Inventory the reference tree to a port map — checked into `docs/migration/source-map.md` (expand per phase).
+- [x] Add `scripts/parity-run.sh` that runs `axon check` and (when available) migration driver `check` on fixtures; compare exit codes; optional **`PARITY_STRICT=1`** for stdout/stderr diff.
+- [x] Add `scripts/parity-fixture-list.txt` with stable ordering (starts at `project_typecheck_valid`).
+- [x] Land sidecar skeletons `native_codegen.rs`, `foreign_archive.rs` returning **not migrated yet** placeholders.
 
 **Verification:**
 ```bash

@@ -47,7 +47,7 @@ Migration entry points already in this repo:
 ```bash
 ./scripts/verify-self-bootstrap.sh
 ./scripts/verify-self-hosting-cutover.sh
-bash scripts/parity-run.sh                                # while migrating phases
+bash scripts/parity-run.sh                    # exit-code parity vs driver (see scripts/parity-fixture-list.txt)
 ```
 
 `verify-self-bootstrap.sh` and `verify-self-hosting-cutover.sh` look for a manifest in this order: `AXON_BOOTSTRAP_MANIFEST` env var, then `bootstrap-compiler/Cargo.toml`, then `deprecioated-soon-compiler-do-not-rename/Cargo.toml` if a reference checkout is present locally. After Phase 11 of the migration plan, only `bootstrap-compiler/Cargo.toml` and `AXON_BOOTSTRAP_MANIFEST` survive.

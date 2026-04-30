@@ -1,0 +1,5 @@
+project ambiguous_import
+    version: "0.1.0"
+
+bin ambiguous_import
+    main: "./src/main.ax"

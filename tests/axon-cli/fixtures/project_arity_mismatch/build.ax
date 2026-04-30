@@ -1,0 +1,5 @@
+project arity_mismatch
+    version: "0.1.0"
+
+bin arity_mismatch
+    main: "./src/main.ax"

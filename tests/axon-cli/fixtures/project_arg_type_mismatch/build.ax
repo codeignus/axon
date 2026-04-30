@@ -1,0 +1,5 @@
+project arg_type_mismatch
+    version: "0.1.0"
+
+bin arg_type_mismatch
+    main: "./src/main.ax"
