@@ -1,10 +1,14 @@
-// Sidecar: unknown-token rejection mirrors `lexer.ax` classify_token.
+// Sidecar: file I/O boundary for the lexer pipeline.
+// Tokenization logic is migrating to lexer.ax; this file handles filesystem
+// walking and validation calls that the Axon build pipeline depends on.
+// The Rust classify_token / scan_lex_contract remain as the authoritative
+// validation until the Axon-native tokenization is wired end-to-end.
 
 fn classify_token(trimmed: &str) -> &'static str {
     if trimmed.is_empty() {
         return "empty";
     }
-    if matches!(trimmed, ":=" | "==" | "!=" | "<=" | ">=" | "&&" | "||") {
+    if matches!(trimmed, ":=" | "==" | "!=" | "<=" | ">=" | "&&" | "||" | "=>" | "+=" | "-=" | "..") {
         return "operator";
     }
     let Some(first) = trimmed.chars().next() else {
@@ -12,14 +16,20 @@ fn classify_token(trimmed: &str) -> &'static str {
     };
     match first {
         '"' => "string_literal",
+        '\'' => "char_literal",
         '0'..='9' => "int_literal",
-        '(' | ')' | '{' | '}' | '[' | ']' | ':' | ',' | '.' => "delimiter",
-        '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' => "operator",
+        '(' | ')' | '{' | '}' | '[' | ']' | ':' | ',' | '.' | ';' | '@' => "delimiter",
+        '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '&' | '|' | '?' => "operator",
         'a'..='z' | 'A'..='Z' | '_' => {
             if matches!(
                 trimmed,
                 "func" | "pub" | "import" | "return" | "if" | "elif" | "else" | "mut"
-                    | "for" | "while" | "test"
+                    | "for" | "while" | "test" | "method" | "type" | "struct" | "enum"
+                    | "trait" | "error" | "in" | "break" | "continue" | "match" | "ref"
+                    | "async" | "await" | "shared" | "buffer" | "defer" | "errdefer"
+                    | "self" | "and" | "or" | "not" | "nil" | "try" | "catch"
+                    | "orelse" | "ordefault" | "include" | "project" | "bin" | "deps"
+                    | "rust" | "rust_deps" | "go" | "go_deps" | "python_deps" | "end"
             ) {
                 return "keyword";
             }
@@ -86,10 +96,49 @@ fn scan_lex_contract(source: &str) -> Result<usize, String> {
             continue;
         }
 
+        if c == '\'' {
+            i += 1;
+            bump_pos(c, &mut col, &mut line);
+            while i < chars.len() && chars[i] != '\'' && chars[i] != '\n' {
+                if chars[i] == '\\' {
+                    bump_pos(chars[i], &mut col, &mut line);
+                    i += 1;
+                    if i < chars.len() {
+                        bump_pos(chars[i], &mut col, &mut line);
+                        i += 1;
+                    }
+                    continue;
+                }
+                bump_pos(chars[i], &mut col, &mut line);
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == '\'' {
+                bump_pos(chars[i], &mut col, &mut line);
+                i += 1;
+            }
+            continue;
+        }
+
         if c == '/' && i + 1 < chars.len() && chars[i + 1] == '/' {
             i += 2;
             col += 2;
             while i < chars.len() && chars[i] != '\n' {
+                bump_pos(chars[i], &mut col, &mut line);
+                i += 1;
+            }
+            continue;
+        }
+
+        if c == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
+            i += 2;
+            col += 2;
+            while i < chars.len() {
+                if chars[i] == '*' && i + 1 < chars.len() && chars[i + 1] == '/' {
+                    bump_pos(chars[i], &mut col, &mut line);
+                    bump_pos(chars[i + 1], &mut col, &mut line);
+                    i += 2;
+                    break;
+                }
                 bump_pos(chars[i], &mut col, &mut line);
                 i += 1;
             }
@@ -102,10 +151,10 @@ fn scan_lex_contract(source: &str) -> Result<usize, String> {
 
         while i < chars.len() {
             let t = chars[i];
-            if t.is_whitespace() || t == '"' {
+            if t.is_whitespace() || t == '"' || t == '\'' {
                 break;
             }
-            if t == '/' && i + 1 < chars.len() && chars[i + 1] == '/' {
+            if t == '/' && i + 1 < chars.len() && (chars[i + 1] == '/' || chars[i + 1] == '*') {
                 break;
             }
             bump_pos(t, &mut col, &mut line);
@@ -168,7 +217,7 @@ fn describe_tokenization(source: &str) -> String {
 fn lex_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
-        false => PathBuf::from(root),
+        false => std::path::PathBuf::from(root),
     };
     match walk_and_lex(&root_path) {
         Ok(count) => format!("ok:lexed:{count}"),
@@ -181,7 +230,6 @@ fn run_lex_check(root: &str) -> String {
     lex_check_message(root)
 }
 
-/// Bool path avoids Axon codegen bugs when inspecting returned `String` values from Rust.
 #[axon_pub_export]
 fn lex_stage_failed(root: &str) -> bool {
     lex_check_message(root).starts_with("error")

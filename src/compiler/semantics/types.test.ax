@@ -1,0 +1,130 @@
+test type_infer_literal_string
+    assert_eq(type_infer_literal("\"hello\""), "String")
+
+test type_infer_literal_int
+    assert_eq(type_infer_literal("42"), "i32")
+
+test type_infer_literal_bool_true
+    assert_eq(type_infer_literal("true"), "bool")
+
+test type_infer_literal_bool_false
+    assert_eq(type_infer_literal("false"), "bool")
+
+test type_infer_literal_nil
+    assert_eq(type_infer_literal("nil"), "void")
+
+test type_infer_literal_empty
+    assert_eq(type_infer_literal(""), "void")
+
+test type_infer_binary_op_add_ints
+    assert_eq(type_infer_binary_op("+", "i32", "i32"), "i32")
+
+test type_infer_binary_op_add_widening
+    assert_eq(type_infer_binary_op("+", "i32", "i64"), "i64")
+
+test type_infer_binary_op_sub_ints
+    assert_eq(type_infer_binary_op("-", "i32", "i32"), "i32")
+
+test type_infer_binary_op_mul_floats
+    assert_eq(type_infer_binary_op("*", "f32", "f64"), "f64")
+
+test type_infer_binary_op_string_concat
+    assert_eq(type_infer_binary_op("+", "String", "i32"), "String")
+
+test type_infer_binary_op_string_concat_right
+    assert_eq(type_infer_binary_op("+", "i32", "String"), "String")
+
+test type_infer_binary_op_eq
+    assert_eq(type_infer_binary_op("==", "i32", "i32"), "bool")
+
+test type_infer_binary_op_lt
+    assert_eq(type_infer_binary_op("<", "i64", "i64"), "bool")
+
+test type_infer_binary_op_and
+    assert_eq(type_infer_binary_op("&&", "bool", "bool"), "bool")
+
+test type_infer_binary_op_or
+    assert_eq(type_infer_binary_op("||", "bool", "bool"), "bool")
+
+test type_infer_binary_op_invalid_arithmetic
+    result := type_infer_binary_op("+", "bool", "bool")
+    assert_eq(message_is_error(result), "yes")
+
+test type_infer_binary_op_unknown_propagates
+    assert_eq(type_infer_binary_op("+", "Unknown", "i32"), "Unknown")
+
+test type_compatible_same
+    assert_eq(type_compatible("i32", "i32"), true)
+
+test type_compatible_i32_to_i64
+    assert_eq(type_compatible("i32", "i64"), true)
+
+test type_compatible_i8_to_i32
+    assert_eq(type_compatible("i8", "i32"), true)
+
+test type_compatible_f32_to_f64
+    assert_eq(type_compatible("f32", "f64"), true)
+
+test type_compatible_incompatible
+    assert_eq(type_compatible("String", "i32"), false)
+
+test type_compatible_void_any
+    assert_eq(type_compatible("void", "i32"), true)
+
+test type_compatible_unknown_any
+    assert_eq(type_compatible("Unknown", "String"), true)
+
+test types_unify_same
+    assert_eq(types_unify("i32", "i32"), "i32")
+
+test types_unify_widen
+    assert_eq(types_unify("i32", "i64"), "i64")
+
+test types_unify_floats
+    assert_eq(types_unify("f32", "f64"), "f64")
+
+test types_unify_incompatible
+    result := types_unify("String", "i32")
+    assert_eq(message_is_error(result), "yes")
+
+test types_unify_unknown
+    assert_eq(types_unify("Unknown", "i32"), "Unknown")
+
+test type_check_return_ok
+    assert_eq(type_check_return("i32", "i32"), "ok")
+
+test type_check_return_widen
+    assert_eq(type_check_return("i32", "i64"), "ok")
+
+test type_check_return_mismatch
+    result := type_check_return("String", "i32")
+    assert_eq(message_is_error(result), "yes")
+
+test type_check_return_void
+    assert_eq(type_check_return("void", "i32"), "ok")
+
+test lookup_type_found
+    env := add_binding("|", "x", "i32")
+    assert_eq(lookup_type("x", env), "i32")
+
+test lookup_type_not_found
+    assert_eq(lookup_type("y", "|x:i32|"), "Unknown")
+
+test lookup_type_multiple
+    env := add_binding(add_binding("|", "x", "i32"), "y", "String")
+    assert_eq(lookup_type("x", env), "i32")
+    assert_eq(lookup_type("y", env), "String")
+
+test add_binding_appends
+    env := add_binding("|", "a", "bool")
+    env = add_binding(env, "b", "i64")
+    assert_eq(lookup_type("a", env), "bool")
+    assert_eq(lookup_type("b", env), "i64")
+
+test type_error_format
+    result := type_error("bad type")
+    assert_eq(message_is_error(result), "yes")
+
+test type_mismatch_error_format
+    result := type_mismatch_error("i32", "String", "assignment")
+    assert_eq(message_is_error(result), "yes")

@@ -1,0 +1,7 @@
+pub func preserve_bootstrap_binary(stage String) String
+    return preserve_suffixed_binary(stage)
+
+pub func verify_binary_runnable(path String) bool
+    if path == ""
+        return false
+    return true

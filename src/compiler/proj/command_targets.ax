@@ -11,3 +11,22 @@ pub func scope_name_for_command(name: String) String
 
 pub func fileset_name_for_command(name: String) String
     return "src-tests-plus-tests"
+
+pub func resolve_check_target_path(target: String) String
+    return resolve_check_target(target)
+
+pub func resolve_build_target_path(target: String) String
+    if target == "":
+        return "project"
+    if target == ".":
+        return "dir:."
+    return resolve_check_target(target)
+
+pub func resolve_test_target_path(target: String) String
+    return resolve_test_target(target)
+
+pub func target_is_project_scope(target: String) bool
+    return target == "" or target == "project"
+
+pub func target_is_file_scope(target: String) bool
+    return string_ends_with(target, ".ax") and axon_string_starts_with(target, "file:")

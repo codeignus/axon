@@ -29,6 +29,8 @@ enum Command {
 //   instead of relying on parser-level name heuristics.
 // - Once that is stable, this split API can be replaced by a single typed return.
 
+/// FFI: Parses CLI args and returns the subcommand name as a string.
+/// One of: "check", "build", "run", "test", "fmt", "mcp".
 #[axon_export]
 fn cli_command() -> String {
     let args = Cli::parse();
@@ -42,6 +44,8 @@ fn cli_command() -> String {
     }
 }
 
+/// FFI: Parses CLI args and returns the optional target argument.
+/// Returns empty string if the subcommand takes no target or none was provided.
 #[axon_export]
 fn cli_target() -> String {
     let args = Cli::parse();

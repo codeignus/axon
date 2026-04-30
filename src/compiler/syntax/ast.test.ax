@@ -1,0 +1,62 @@
+// Tests for AST node construction and inspection.
+
+test node_make_and_kind
+    n := node_make("func_decl", "name:main")
+    assert_eq(node_kind(n), "func_decl")
+
+test node_make_and_data
+    n := node_make("func_decl", "name:main")
+    assert_eq(node_data(n), "name:main")
+
+test node_kind_no_pipe_returns_full
+    assert_eq(node_kind("func_decl"), "func_decl")
+
+test node_data_no_pipe_returns_empty
+    assert_eq(node_data("func_decl"), "")
+
+test node_with_kind_replaces_kind
+    n := node_make("call_expr", "foo(1)")
+    m := node_with_kind(n, "ident_expr")
+    assert_eq(node_kind(m), "ident_expr")
+    assert_eq(node_data(m), "foo(1)")
+
+test node_append_child_to_empty
+    n := node_make("block_expr", "")
+    m := node_append_child(n, "stmt1")
+    assert_eq(node_data(m), "stmt1")
+
+test node_append_child_to_nonempty
+    n := node_make("block_expr", "stmt1")
+    m := node_append_child(n, "stmt2")
+    assert_eq(node_data(m), "stmt1;stmt2")
+
+test node_make_empty_data
+    n := node_make("nil_expr", "")
+    assert_eq(node_kind(n), "nil_expr")
+    assert_eq(node_data(n), "")
+
+test node_constants_distinct
+    a := NODE_FUNC_DECL()
+    b := NODE_STRUCT_DECL()
+    c := NODE_CALL_EXPR()
+    d := NODE_BINDING_STMT()
+    e := NODE_NAMED_TYPE()
+    f := NODE_BINDING_PATTERN()
+    assert_eq(a == b, false)
+    assert_eq(a == c, false)
+    assert_eq(c == d, false)
+    assert_eq(d == e, false)
+    assert_eq(e == f, false)
+
+test node_kind_name_identity
+    assert_eq(node_kind_name("func_decl"), "func_decl")
+
+test node_roundtrip
+    n := node_make(NODE_BINARY_EXPR(), "add|1|2")
+    assert_eq(node_kind(n), NODE_BINARY_EXPR())
+    assert_eq(node_data(n), "add|1|2")
+
+test node_append_preserves_kind
+    n := node_make("match_stmt", "")
+    m := node_append_child(n, "arm1")
+    assert_eq(node_kind(m), "match_stmt")

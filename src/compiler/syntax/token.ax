@@ -121,5 +121,278 @@ pub func TOKEN_EOF() String
 pub func TOKEN_ERROR() String
     return "error"
 
+pub func TOKEN_FAT_ARROW() String
+    return "fat_arrow"
+
+pub func TOKEN_SEMI() String
+    return "semi"
+
+pub func TOKEN_PLUS_EQ() String
+    return "plus_eq"
+
+pub func TOKEN_MINUS_EQ() String
+    return "minus_eq"
+
+pub func TOKEN_ANDAND() String
+    return "andand"
+
+pub func TOKEN_OROR() String
+    return "oror"
+
+pub func TOKEN_RAW_BLOCK() String
+    return "raw_block"
+
+pub func TOKEN_FSTRING_START() String
+    return "fstring_start"
+
+pub func TOKEN_KW_FUNC() String
+    return "kw_func"
+
+pub func TOKEN_KW_METHOD() String
+    return "kw_method"
+
+pub func TOKEN_KW_TYPE() String
+    return "kw_type"
+
+pub func TOKEN_KW_STRUCT() String
+    return "kw_struct"
+
+pub func TOKEN_KW_ENUM() String
+    return "kw_enum"
+
+pub func TOKEN_KW_TRAIT() String
+    return "kw_trait"
+
+pub func TOKEN_KW_ERROR() String
+    return "kw_error"
+
+pub func TOKEN_KW_TEST() String
+    return "kw_test"
+
+pub func TOKEN_KW_MUT() String
+    return "kw_mut"
+
+pub func TOKEN_KW_IF() String
+    return "kw_if"
+
+pub func TOKEN_KW_ELIF() String
+    return "kw_elif"
+
+pub func TOKEN_KW_ELSE() String
+    return "kw_else"
+
+pub func TOKEN_KW_FOR() String
+    return "kw_for"
+
+pub func TOKEN_KW_IN() String
+    return "kw_in"
+
+pub func TOKEN_KW_WHILE() String
+    return "kw_while"
+
+pub func TOKEN_KW_BREAK() String
+    return "kw_break"
+
+pub func TOKEN_KW_CONTINUE() String
+    return "kw_continue"
+
+pub func TOKEN_KW_MATCH() String
+    return "kw_match"
+
+pub func TOKEN_KW_RETURN() String
+    return "kw_return"
+
+pub func TOKEN_KW_REF() String
+    return "kw_ref"
+
+pub func TOKEN_KW_ASYNC() String
+    return "kw_async"
+
+pub func TOKEN_KW_AWAIT() String
+    return "kw_await"
+
+pub func TOKEN_KW_SHARED() String
+    return "kw_shared"
+
+pub func TOKEN_KW_BUFFER() String
+    return "kw_buffer"
+
+pub func TOKEN_KW_DEFER() String
+    return "kw_defer"
+
+pub func TOKEN_KW_ERRDEFER() String
+    return "kw_errdefer"
+
+pub func TOKEN_KW_SELF() String
+    return "kw_self"
+
+pub func TOKEN_KW_AND() String
+    return "kw_and"
+
+pub func TOKEN_KW_OR() String
+    return "kw_or"
+
+pub func TOKEN_KW_NOT() String
+    return "kw_not"
+
+pub func TOKEN_KW_NIL() String
+    return "kw_nil"
+
+pub func TOKEN_KW_TRY() String
+    return "kw_try"
+
+pub func TOKEN_KW_CATCH() String
+    return "kw_catch"
+
+pub func TOKEN_KW_ORELSE() String
+    return "kw_orelse"
+
+pub func TOKEN_KW_ORDEFAULT() String
+    return "kw_ordefault"
+
+pub func TOKEN_KW_INCLUDE() String
+    return "kw_include"
+
+pub func TOKEN_KW_PUB() String
+    return "kw_pub"
+
+pub func TOKEN_KW_PROJECT() String
+    return "kw_project"
+
+pub func TOKEN_KW_BIN() String
+    return "kw_bin"
+
+pub func TOKEN_KW_DEPS() String
+    return "kw_deps"
+
+pub func TOKEN_KW_IMPORT() String
+    return "kw_import"
+
+pub func TOKEN_KW_RUST() String
+    return "kw_rust"
+
+pub func TOKEN_KW_RUST_DEPS() String
+    return "kw_rust_deps"
+
+pub func TOKEN_KW_GO() String
+    return "kw_go"
+
+pub func TOKEN_KW_GO_DEPS() String
+    return "kw_go_deps"
+
+pub func TOKEN_KW_PYTHON_DEPS() String
+    return "kw_python_deps"
+
+pub func TOKEN_KW_END() String
+    return "kw_end"
+
 pub func token_kind_name(kind: String) String
     return kind
+
+func digit_char(d: i64) String
+    if d == 0:
+        return "0"
+    if d == 1:
+        return "1"
+    if d == 2:
+        return "2"
+    if d == 3:
+        return "3"
+    if d == 4:
+        return "4"
+    if d == 5:
+        return "5"
+    if d == 6:
+        return "6"
+    if d == 7:
+        return "7"
+    if d == 8:
+        return "8"
+    if d == 9:
+        return "9"
+    return "?"
+
+func i64_to_string_rec(n: i64) String
+    if n == 0:
+        return ""
+    digit := n - (n / 10) * 10
+    rest := n / 10
+    return i64_to_string_rec(rest) + digit_char(digit)
+
+pub func i64_to_string(n: i64) String
+    if n == 0:
+        return "0"
+    if n < 0:
+        return "-" + i64_to_string_rec(0 - n)
+    return i64_to_string_rec(n)
+
+func char_digit_value(c: String) i64
+    if c == "0":
+        return 0
+    if c == "1":
+        return 1
+    if c == "2":
+        return 2
+    if c == "3":
+        return 3
+    if c == "4":
+        return 4
+    if c == "5":
+        return 5
+    if c == "6":
+        return 6
+    if c == "7":
+        return 7
+    if c == "8":
+        return 8
+    if c == "9":
+        return 9
+    return 0
+
+func string_to_i64_rec(s: String, acc: i64) i64
+    if axon_string_count(s, "") == 0:
+        return acc
+    c := axon_string_char_at(s, 0)
+    rest := axon_string_sub(s, 1, axon_string_count(s, "") - 1)
+    return string_to_i64_rec(rest, acc * 10 + char_digit_value(c))
+
+pub func string_to_i64(s: String) i64
+    if axon_string_count(s, "") == 0:
+        return 0
+    if axon_string_starts_with(s, "-"):
+        rest := axon_string_sub(s, 1, axon_string_count(s, "") - 1)
+        return 0 - string_to_i64_rec(rest, 0)
+    return string_to_i64_rec(s, 0)
+
+func find_nth_pipe(s: String, from: i64, n: i64) i64
+    if from >= axon_string_count(s, ""):
+        return axon_string_count(s, "")
+    if axon_string_char_at(s, from) == "|":
+        if n == 0:
+            return from
+        return find_nth_pipe(s, from + 1, n - 1)
+    return find_nth_pipe(s, from + 1, n)
+
+func extract_field(s: String, field: i64) String
+    if field == 0:
+        pipe := find_nth_pipe(s, 0, 0)
+        return axon_string_sub(s, 0, pipe)
+    prev_pipe := find_nth_pipe(s, 0, field - 1)
+    next_pipe := find_nth_pipe(s, 0, field)
+    start := prev_pipe + 1
+    return axon_string_sub(s, start, next_pipe - start)
+
+pub func token_make(kind: String, text: String, start: i64, end_pos: i64) String
+    return kind + "|" + text + "|" + i64_to_string(start) + "|" + i64_to_string(end_pos)
+
+pub func token_kind(t: String) String
+    return extract_field(t, 0)
+
+pub func token_text(t: String) String
+    return extract_field(t, 1)
+
+pub func token_start(t: String) i64
+    return string_to_i64(extract_field(t, 2))
+
+pub func token_end(t: String) i64
+    return string_to_i64(extract_field(t, 3))

@@ -1,7 +1,83 @@
-// Resolver-facing API currently delegates to shared semantic snippet checks.
-// Keeping this wrapper allows resolver-specific diagnostics to be added later.
+import
+    compiler/complex_types/string { string_len }
+
+func scan_import_lines(source: String, idx: i64, total: i64, in_import: bool, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if trimmed == "import":
+        return scan_import_lines(source, idx + 1, total, true, errors)
+    if in_import == false:
+        return scan_import_lines(source, idx + 1, total, false, errors)
+    if string_len(trimmed) == 0 or axon_string_starts_with(trimmed, "func ") or axon_string_starts_with(trimmed, "pub func ") or axon_string_starts_with(trimmed, "test "):
+        return scan_import_lines(source, idx + 1, total, false, errors)
+    brace_idx := find_char(trimmed, "{")
+    mut path_part := ""
+    if brace_idx >= 0:
+        path_part = axon_string_trim(axon_string_sub(trimmed, 0, brace_idx))
+    else:
+        path_part = axon_string_trim(trimmed)
+    if string_len(path_part) > 0:
+        if axon_import_path_exists(path_part) == false:
+            new_err := "error: unresolved import '" + path_part + "'"
+            return scan_import_lines(source, idx + 1, total, true, errors + new_err + "\n")
+    return scan_import_lines(source, idx + 1, total, true, errors)
+
+func collect_import_symbols(source: String, idx: i64, total: i64, in_import: bool, acc: String) String
+    if idx >= total:
+        return acc
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if trimmed == "import":
+        return collect_import_symbols(source, idx + 1, total, true, acc)
+    if in_import == false:
+        return collect_import_symbols(source, idx + 1, total, false, acc)
+    if string_len(trimmed) == 0 or axon_string_starts_with(trimmed, "func ") or axon_string_starts_with(trimmed, "pub func ") or axon_string_starts_with(trimmed, "test "):
+        return collect_import_symbols(source, idx + 1, total, false, acc)
+    brace_idx := find_char(trimmed, "{")
+    if brace_idx >= 0:
+        inner := axon_string_sub(trimmed, brace_idx + 1, string_len(trimmed) - brace_idx - 1)
+        close_brace := find_char(inner, "}")
+        mut symbols := ""
+        if close_brace >= 0:
+            symbols = axon_string_sub(inner, 0, close_brace)
+        else:
+            symbols = inner
+        return collect_import_symbols(source, idx + 1, total, true, acc + symbols + ",")
+    return collect_import_symbols(source, idx + 1, total, true, acc)
+
+func scan_arity_entries(source: String, idx: i64, total: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    fname := parse_func_name_from_line(trimmed)
+    if string_len(fname) > 0:
+        arity := parse_func_arity_from_decl(trimmed)
+        if arity >= 0:
+            entry := fname + ":" + arity_char(arity)
+            if string_len(acc) > 0:
+                return scan_arity_entries(source, idx + 1, total, acc + "|" + entry)
+            return scan_arity_entries(source, idx + 1, total, entry)
+    return scan_arity_entries(source, idx + 1, total, acc)
+
 pub func check_duplicate_names(source: String) String
-    return run_semantic_check(source)
+    return axon_semantic_check(source)
 
 pub func check_imports(source: String) String
-    return run_semantic_check(source)
+    if string_len(axon_string_trim(source)) == 0:
+        return "ok:semantic-snippet:empty"
+    errors := scan_import_lines(source, 0, count_lines(source), false, "")
+    if string_len(errors) > 0:
+        return errors
+    return axon_semantic_check(source)
+
+pub func check_duplicate_declarations(source: String) String
+    return axon_semantic_check(source)
+
+pub func resolve_import_names(source: String) String
+    return collect_import_symbols(source, 0, count_lines(source), false, "")
+
+pub func resolve_symbol_arity(source: String) String
+    return scan_arity_entries(source, 0, count_lines(source), "")

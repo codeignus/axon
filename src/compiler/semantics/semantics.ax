@@ -202,11 +202,288 @@ func arity_char(n: i64) String
 func arity_entry(name: String, arity: i64) String
     return "|" + name + ":" + arity_char(arity) + "|"
 
+func skip_whitespace(s: String, from: i64) i64
+    mut i: i64 = from
+    while i < string_len(s) and (axon_string_char_at(s, i) == " " or axon_string_char_at(s, i) == "\t"):
+        i = i + 1
+    return i
+
+func parse_return_type_from_decl(line: String) String
+    mut rest := ""
+    if axon_string_starts_with(line, "func "):
+        rest = axon_string_sub(line, 5, string_len(line) - 5)
+    elif axon_string_starts_with(line, "pub func "):
+        rest = axon_string_sub(line, 9, string_len(line) - 9)
+    else:
+        return "void"
+    close_idx := find_char(rest, ")")
+    if close_idx < 0:
+        return "void"
+    after := axon_string_trim(axon_string_sub(rest, close_idx + 1, string_len(rest) - close_idx - 1))
+    if string_len(after) == 0:
+        return "void"
+    return take_ident(after)
+
+func extract_param_type(param: String) String
+    colon_pos := find_char(param, ":")
+    if colon_pos < 0:
+        return "Unknown"
+    after := axon_string_trim(axon_string_sub(param, colon_pos + 1, string_len(param) - colon_pos - 1))
+    return take_ident(after)
+
+func split_params_raw(params: String) String
+    if string_len(axon_string_trim(params)) == 0:
+        return ""
+    mut result: String = ""
+    mut depth: i64 = 0
+    mut start: i64 = 0
+    mut i: i64 = 0
+    while i < string_len(params):
+        c := axon_string_char_at(params, i)
+        if c == "(":
+            depth = depth + 1
+        elif c == ")":
+            depth = depth - 1
+        if c == "," and depth == 0:
+            piece := axon_string_trim(axon_string_sub(params, start, i - start))
+            ty := extract_param_type(piece)
+            if string_len(result) > 0:
+                result = result + "," + ty
+            else:
+                if string_len(ty) > 0:
+                    result = ty
+            start = i + 1
+        i = i + 1
+    piece := axon_string_trim(axon_string_sub(params, start, string_len(params) - start))
+    ty := extract_param_type(piece)
+    if string_len(result) > 0:
+        if string_len(ty) > 0:
+            result = result + "," + ty
+    else:
+        if string_len(ty) > 0:
+            result = ty
+    return result
+
+func parse_param_types_from_decl(line: String) String
+    mut rest := ""
+    if axon_string_starts_with(line, "func "):
+        rest = axon_string_sub(line, 5, string_len(line) - 5)
+    elif axon_string_starts_with(line, "pub func "):
+        rest = axon_string_sub(line, 9, string_len(line) - 9)
+    else:
+        return ""
+    open_idx := find_char(rest, "(")
+    if open_idx < 0:
+        return ""
+    after_open := axon_string_sub(rest, open_idx + 1, string_len(rest) - open_idx - 1)
+    close_idx := find_char(after_open, ")")
+    if close_idx < 0:
+        return ""
+    params := axon_string_sub(after_open, 0, close_idx)
+    return split_params_raw(params)
+
+func get_nth_csv(s: String, idx: i64) String
+    mut current: i64 = 0
+    mut start: i64 = 0
+    mut i: i64 = 0
+    while i <= string_len(s):
+        at_end := i == string_len(s)
+        is_sep := false
+        if at_end == false:
+            is_sep = axon_string_char_at(s, i) == ","
+        if at_end or is_sep:
+            if current == idx:
+                return axon_string_sub(s, start, i - start)
+            current = current + 1
+            start = i + 1
+        i = i + 1
+    return ""
+
+func infer_type_of_expr(expr: String) String
+    e := axon_string_trim(expr)
+    if string_len(e) == 0:
+        return "void"
+    if axon_string_starts_with(e, "\""):
+        return "String"
+    if e == "true" or e == "false":
+        return "Bool"
+    mut all_digits := true
+    mut ci: i64 = 0
+    while ci < string_len(e):
+        b := axon_string_byte_at(e, ci)
+        if b < 48 or b > 57:
+            all_digits = false
+        ci = ci + 1
+    if all_digits and string_len(e) > 0:
+        return "Int"
+    return "Unknown"
+
+func find_call_open_paren(line: String, name_start: i64, name_len: i64) i64
+    after_name := name_start + name_len
+    pos := skip_whitespace(line, after_name)
+    if pos < string_len(line) and axon_string_char_at(line, pos) == "(":
+        return pos
+    return -1
+
+func extract_call_arg_exprs(line: String, open_pos: i64) String
+    mut depth: i64 = 1
+    mut j: i64 = open_pos + 1
+    mut current: String = ""
+    mut result: String = ""
+    mut in_string := false
+    while j < string_len(line):
+        c := axon_string_char_at(line, j)
+        if in_string:
+            current = current + c
+            if c == "\\" and j + 1 < string_len(line):
+                j = j + 1
+                current = current + axon_string_char_at(line, j)
+                j = j + 1
+                continue
+            if c == "\"":
+                in_string = false
+            j = j + 1
+            continue
+        if c == "\"":
+            in_string = true
+            current = current + c
+            j = j + 1
+            continue
+        if c == "(":
+            depth = depth + 1
+            current = current + c
+            j = j + 1
+            continue
+        if c == ")":
+            depth = depth - 1
+            if depth == 0:
+                trimmed := axon_string_trim(current)
+                if string_len(trimmed) > 0:
+                    if string_len(result) > 0:
+                        result = result + "|" + trimmed
+                    else:
+                        result = trimmed
+                return result
+            current = current + c
+            j = j + 1
+            continue
+        if c == "," and depth == 1:
+            trimmed := axon_string_trim(current)
+            if string_len(trimmed) > 0:
+                if string_len(result) > 0:
+                    result = result + "|" + trimmed
+                else:
+                    result = trimmed
+            current = ""
+            j = j + 1
+            continue
+        current = current + c
+        j = j + 1
+    return result
+
+func get_nth_pipe(s: String, idx: i64) String
+    mut current: i64 = 0
+    mut start: i64 = 0
+    mut i: i64 = 0
+    while i <= string_len(s):
+        at_end := i == string_len(s)
+        is_sep := false
+        if at_end == false:
+            is_sep = axon_string_char_at(s, i) == "|"
+        if at_end or is_sep:
+            if current == idx:
+                return axon_string_sub(s, start, i - start)
+            current = current + 1
+            start = i + 1
+        i = i + 1
+    return ""
+
+func find_dot_method(line: String) String
+    mut i: i64 = 0
+    while i < string_len(line):
+        if axon_string_char_at(line, i) == ".":
+            j := i + 1
+            if j < string_len(line) and is_ident_char(axon_string_char_at(line, j)):
+                start := j
+                while j < string_len(line) and is_ident_char(axon_string_char_at(line, j)):
+                    j = j + 1
+                if j < string_len(line) and axon_string_char_at(line, j) == "(":
+                    name := axon_string_sub(line, start, j - start)
+                    return name
+        i = i + 1
+    return ""
+
+func count_method_args(line: String) i64
+    mut i: i64 = 0
+    while i < string_len(line):
+        if axon_string_char_at(line, i) == ".":
+            j := i + 1
+            if j < string_len(line) and is_ident_char(axon_string_char_at(line, j)):
+                while j < string_len(line) and is_ident_char(axon_string_char_at(line, j)):
+                    j = j + 1
+                if j < string_len(line) and axon_string_char_at(line, j) == "(":
+                    return count_call_args(line, j)
+        i = i + 1
+    return -1
+
+func lookup_func_param_type(param_data: String, func_name: String, arg_idx: i64) String
+    prefix := "|" + func_name + "="
+    mut i: i64 = 0
+    while i < string_len(param_data):
+        rest := axon_string_sub(param_data, i, string_len(param_data) - i)
+        if axon_string_starts_with(rest, prefix):
+            type_list_start := i + string_len(prefix)
+            pipe_after := find_char(axon_string_sub(param_data, type_list_start, string_len(param_data) - type_list_start), "|")
+            mut type_list_end: i64 = 0
+            if pipe_after < 0:
+                type_list_end = string_len(param_data)
+            else:
+                type_list_end = type_list_start + pipe_after
+            type_list := axon_string_sub(param_data, type_list_start, type_list_end - type_list_start)
+            return get_nth_csv(type_list, arg_idx)
+        i = i + 1
+    return "Unknown"
+
+func check_arg_types_for_call(line: String, callee: String, param_data: String) String
+    open_pos := find_call_open_for_name(line, callee)
+    if open_pos < 0:
+        return ""
+    args := extract_call_arg_exprs(line, open_pos)
+    if string_len(args) == 0:
+        return ""
+    mut arg_idx: i64 = 0
+    mut a := get_nth_pipe(args, arg_idx)
+    while string_len(a) > 0:
+        expected_ty := lookup_func_param_type(param_data, callee, arg_idx)
+        got_ty := infer_type_of_expr(a)
+        if string_len(expected_ty) > 0 and expected_ty != "Unknown" and got_ty != "Unknown" and expected_ty != got_ty:
+            return "error: semantics: argument type mismatch calling '" + callee + "' (arg " + arity_char(arg_idx + 1) + " expected " + expected_ty + ", got " + got_ty + ") in snippet"
+        arg_idx = arg_idx + 1
+        a = get_nth_pipe(args, arg_idx)
+    return ""
+
+func find_call_open_for_name(line: String, name: String) i64
+    mut i: i64 = 0
+    while i < string_len(line):
+        c := axon_string_char_at(line, i)
+        if is_ident_char(c):
+            start := i
+            while i < string_len(line) and is_ident_char(axon_string_char_at(line, i)):
+                i = i + 1
+            ident := axon_string_sub(line, start, i - start)
+            if ident == name:
+                pos := skip_whitespace(line, i)
+                if pos < string_len(line) and axon_string_char_at(line, pos) == "(":
+                    return pos
+        i = i + 1
+    return -1
+
 pub func axon_semantic_check(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return "ok:semantic-snippet:empty"
     mut seen: String = "|"
     mut arity_data: String = "|"
+    mut param_type_data: String = "|"
     num_lines := count_lines(source)
     mut i: i64 = 0
     while i < num_lines:
@@ -220,6 +497,9 @@ pub func axon_semantic_check(source: String) String
             arity := parse_func_arity_from_decl(trimmed)
             if arity >= 0:
                 arity_data = arity_data + fname + ":" + arity_char(arity) + "|"
+            ptypes := parse_param_types_from_decl(trimmed)
+            if string_len(ptypes) > 0:
+                param_type_data = param_type_data + fname + "=" + ptypes + "|"
             i = i + 1
             continue
         callee := parse_call_name_from_line(trimmed)
@@ -230,7 +510,25 @@ pub func axon_semantic_check(source: String) String
                 expected_entry := "|" + callee + ":" + arity_char(got_arity) + "|"
                 if axon_string_contains(arity_data, expected_entry) == false:
                     return "error: semantics: arity mismatch calling '" + callee + "' in snippet"
+                arg_err := check_arg_types_for_call(trimmed, callee, param_type_data)
+                if string_len(arg_err) > 0:
+                    return arg_err
             else:
                 return "error: semantics: unresolved symbol '" + callee + "' in snippet"
+        method := find_dot_method(trimmed)
+        if string_len(method) > 0:
+            method_arity := count_method_args(trimmed)
+            if method == "len":
+                expected_arity := method_arity + 1
+                len_entry := "string_len:" + arity_char(expected_arity) + "|"
+                arr_entry := "array_len:" + arity_char(expected_arity) + "|"
+                has_string := axon_string_contains(arity_data, len_entry)
+                has_array := axon_string_contains(arity_data, arr_entry)
+                if has_string == false and has_array == false:
+                    return "error: semantics: unresolved method '" + method + "' in snippet"
+            else:
+                lookup := method + ":"
+                if axon_string_contains(arity_data, "|" + lookup) == false:
+                    return "error: semantics: unresolved method '" + method + "' in snippet"
         i = i + 1
     return "ok:semantic-snippet"

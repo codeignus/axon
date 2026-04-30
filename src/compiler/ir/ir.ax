@@ -1,3 +1,349 @@
+// MIR type constants
+pub func MIR_TYPE_UNIT() String
+    return "unit"
+
+pub func MIR_TYPE_VOID() String
+    return "void"
+
+pub func MIR_TYPE_INT() String
+    return "int"
+
+pub func MIR_TYPE_FLOAT() String
+    return "float"
+
+pub func MIR_TYPE_BOOL() String
+    return "bool"
+
+pub func MIR_TYPE_STRING() String
+    return "String"
+
+pub func MIR_TYPE_RAW_PTR() String
+    return "rawptr"
+
+pub func MIR_TYPE_STRUCT() String
+    return "struct"
+
+pub func MIR_TYPE_ENUM() String
+    return "enum"
+
+pub func MIR_TYPE_TUPLE() String
+    return "tuple"
+
+pub func MIR_TYPE_LIST() String
+    return "list"
+
+pub func MIR_TYPE_OPTION() String
+    return "option"
+
+pub func MIR_TYPE_RESULT() String
+    return "result"
+
+// MIR expression kind constants
+pub func MIR_EXPR_LOCAL() String
+    return "local"
+
+pub func MIR_EXPR_CONST() String
+    return "const"
+
+pub func MIR_EXPR_BINOP() String
+    return "binop"
+
+pub func MIR_EXPR_UNOP() String
+    return "unop"
+
+pub func MIR_EXPR_CALL() String
+    return "call"
+
+pub func MIR_EXPR_FIELD() String
+    return "field"
+
+pub func MIR_EXPR_TUPLE() String
+    return "tuple"
+
+pub func MIR_EXPR_LIST_LEN() String
+    return "list_len"
+
+pub func MIR_EXPR_LIST_IDX() String
+    return "list_idx"
+
+// MIR statement kind constants
+pub func MIR_STMT_ASSIGN() String
+    return "assign"
+
+pub func MIR_STMT_CALL() String
+    return "call_stmt"
+
+pub func MIR_STMT_CONSTRUCT_SOME() String
+    return "construct_some"
+
+pub func MIR_STMT_CONSTRUCT_NONE() String
+    return "construct_none"
+
+pub func MIR_STMT_CONSTRUCT_STRUCT() String
+    return "construct_struct"
+
+pub func MIR_STMT_STORE_FIELD() String
+    return "store_field"
+
+pub func MIR_STMT_DESTRUCTURE_TUPLE() String
+    return "destructure_tuple"
+
+pub func MIR_STMT_CONSTRUCT_ENUM() String
+    return "construct_enum"
+
+pub func MIR_STMT_INSPECT_ENUM() String
+    return "inspect_enum"
+
+pub func MIR_STMT_CONSTRUCT_LIST() String
+    return "construct_list"
+
+pub func MIR_STMT_LIST_PUSH() String
+    return "list_push"
+
+// MIR terminator kind constants
+pub func MIR_TERM_RETURN() String
+    return "return"
+
+pub func MIR_TERM_GOTO() String
+    return "goto"
+
+pub func MIR_TERM_BRANCH() String
+    return "branch"
+
+pub func MIR_TERM_UNREACHABLE() String
+    return "unreachable"
+
+// MIR binary operator constants
+pub func MIR_BINOP_ADD() String
+    return "add"
+
+pub func MIR_BINOP_SUB() String
+    return "sub"
+
+pub func MIR_BINOP_MUL() String
+    return "mul"
+
+pub func MIR_BINOP_DIV() String
+    return "div"
+
+pub func MIR_BINOP_MOD() String
+    return "mod"
+
+pub func MIR_BINOP_EQ() String
+    return "eq"
+
+pub func MIR_BINOP_NE() String
+    return "ne"
+
+pub func MIR_BINOP_LT() String
+    return "lt"
+
+pub func MIR_BINOP_GT() String
+    return "gt"
+
+pub func MIR_BINOP_LE() String
+    return "le"
+
+pub func MIR_BINOP_GE() String
+    return "ge"
+
+pub func MIR_BINOP_AND() String
+    return "and"
+
+pub func MIR_BINOP_OR() String
+    return "or"
+
+// MIR unary operator constants
+pub func MIR_UNOP_NEG() String
+    return "neg"
+
+pub func MIR_UNOP_NOT() String
+    return "not"
+
+// MIR call target kind constants
+pub func MIR_CALL_BUILTIN() String
+    return "builtin"
+
+pub func MIR_CALL_MODULE_ENTRY() String
+    return "module_entry"
+
+pub func MIR_CALL_FOREIGN() String
+    return "foreign"
+
+// Int width constants
+pub func MIR_INT_I8() String
+    return "i8"
+
+pub func MIR_INT_I16() String
+    return "i16"
+
+pub func MIR_INT_I32() String
+    return "i32"
+
+pub func MIR_INT_I64() String
+    return "i64"
+
+pub func MIR_INT_U8() String
+    return "u8"
+
+pub func MIR_INT_U16() String
+    return "u16"
+
+pub func MIR_INT_U32() String
+    return "u32"
+
+pub func MIR_INT_U64() String
+    return "u64"
+
+// Float width constants
+pub func MIR_FLOAT_F32() String
+    return "f32"
+
+pub func MIR_FLOAT_F64() String
+    return "f64"
+
+// --- Value constructors ---
+
+pub func mir_make_value(ty: String, val: String) String
+    return mir_colon_parts3("const", ty, val)
+
+pub func mir_make_int_value(width: String, val: String) String
+    return mir_colon_parts4("const", "int", width, val)
+
+pub func mir_make_float_value(width: String, val: String) String
+    return mir_colon_parts4("const", "float", width, val)
+
+pub func mir_make_bool_value(val: String) String
+    return mir_colon_parts3("const", "bool", val)
+
+pub func mir_make_string_value(val: String) String
+    return mir_colon_parts3("const", "String", val)
+
+pub func mir_make_unit_value() String
+    return "const:unit:()"
+
+// --- Expression constructors ---
+
+pub func mir_make_local(id: String) String
+    return mir_encode2("local:", id)
+
+pub func mir_make_binop(op: String, left: String, right: String) String
+    return mir_encode6("binop:", op, ":", left, ",", right)
+
+pub func mir_make_unop(op: String, operand: String) String
+    return mir_encode4("unop:", op, ":", operand)
+
+pub func mir_make_call_expr(target: String, args: String) String
+    return mir_encode5("call:", target, "(", args, ")")
+
+pub func mir_make_field(source_id: String, field_name: String, ty: String) String
+    return mir_encode7("field:", source_id, ".", field_name, ":", ty, "")
+
+pub func mir_make_tuple_expr(ids: String) String
+    return mir_encode4("tuple:[", ids, "]", "")
+
+pub func mir_make_list_len(source_id: String) String
+    return mir_encode2("list_len:", source_id)
+
+pub func mir_make_list_idx(source_id: String, index_expr: String, elem_ty: String) String
+    return mir_encode6("list_idx:", source_id, "[", index_expr, "]:", elem_ty)
+
+// --- Statement constructors ---
+
+pub func mir_make_assign(target_id: String, value: String) String
+    return mir_encode4("assign:", target_id, "=", value)
+
+pub func mir_make_call_stmt(target_id: String, callee: String, args: String) String
+    return mir_encode7("call_stmt:", target_id, "=", callee, "(", args, ")")
+
+pub func mir_make_construct_struct(target_id: String, name: String, fields: String) String
+    return mir_encode7("construct_struct:", target_id, ":", name, "{", fields, "}")
+
+pub func mir_make_store_field(target_id: String, field_name: String, value: String) String
+    return mir_encode7("store_field:", target_id, ".", field_name, "=", value, "")
+
+pub func mir_make_destructure_tuple(source_id: String, targets: String) String
+    return mir_encode5("destructure_tuple:", source_id, "->[", targets, "]")
+
+pub func mir_make_construct_enum(target_id: String, enum_name: String, variant: String, fields: String) String
+    return mir_encode9("construct_enum:", target_id, ":", enum_name, ".", variant, "(", fields, ")")
+
+pub func mir_make_construct_list(target_id: String, elem_ty: String, elements: String) String
+    return mir_encode7("construct_list:", target_id, ":", elem_ty, "[", elements, "]")
+
+pub func mir_make_list_push(list_id: String, elem_ty: String, value: String) String
+    return mir_encode7("list_push:", list_id, ":", elem_ty, ".push(", value, ")")
+
+// --- Terminator constructors ---
+
+pub func mir_make_return(value: String) String
+    return mir_encode2("return:", value)
+
+pub func mir_make_return_void() String
+    return "return:void"
+
+pub func mir_make_goto(label: String) String
+    return mir_encode2("goto:", label)
+
+pub func mir_make_branch(cond: String, then_label: String, else_label: String) String
+    return mir_encode6("branch:", cond, "?", then_label, ":", else_label)
+
+pub func mir_make_unreachable() String
+    return "unreachable"
+
+// --- Function/Module constructors ---
+
+pub func mir_make_func(name: String, params: String, return_type: String, blocks: String) String
+    return mir_encode7("func:", name, "(", params, "):", return_type, "")
+    // Note: blocks omitted due to arg limit; full encoding via backend
+
+pub func mir_make_block(label: String, stmts: String, terminator: String) String
+    return mir_encode6("block:", label, "[", stmts, "]", terminator)
+
+pub func mir_make_module(name: String, path: String, functions: String) String
+    return mir_encode7("module:", name, "@", path, "{", functions, "}")
+
+// --- Call target constructors ---
+
+pub func mir_make_builtin_target(name: String) String
+    return mir_encode2("builtin:", name)
+
+pub func mir_make_module_entry_target(module_path: String, entry: String) String
+    return mir_encode4("module_entry:", module_path, "::", entry)
+
+pub func mir_make_foreign_target(symbol: String, lib: String) String
+    return mir_encode4("foreign:", lib, "!", symbol)
+
+// --- Extractors ---
+
+pub func mir_expr_kind(e: String) String
+    return mir_extract_prefix(e)
+
+pub func mir_stmt_kind(s: String) String
+    return mir_extract_prefix(s)
+
+pub func mir_terminator_kind(t: String) String
+    return mir_extract_prefix(t)
+
+func mir_extract_prefix(s: String) String
+    if s == "":
+        return ""
+    idx := mir_find_colon(s, 0)
+    if idx == 0:
+        return ""
+    return axon_string_sub(s, 0, idx)
+
+func mir_find_colon(s: String, start: i64) i64
+    mut i: i64 = start
+    len := axon_string_count(s, "")
+    while i < len:
+        if axon_string_char_at(s, i) == ":":
+            return i
+        i = i + 1
+    return len
+
+// --- Legacy placeholders ---
+
 pub func describe_ir_node(kind: String) String
     return kind
 

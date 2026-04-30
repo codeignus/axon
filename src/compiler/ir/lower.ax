@@ -1,2 +1,87 @@
+import
+    compiler/ir/ir {
+        mir_make_value, mir_make_local, mir_make_binop,
+        mir_make_return, mir_make_return_void, mir_make_branch,
+        mir_make_goto, mir_make_func, mir_make_call_expr,
+        mir_make_bool_value, mir_make_int_value, mir_make_string_value,
+        mir_make_unit_value, mir_make_float_value, mir_make_assign,
+        MIR_BINOP_ADD, MIR_BINOP_SUB, MIR_BINOP_MUL, MIR_BINOP_DIV, MIR_BINOP_MOD,
+        MIR_BINOP_EQ, MIR_BINOP_NE, MIR_BINOP_LT, MIR_BINOP_GT, MIR_BINOP_LE, MIR_BINOP_GE,
+        MIR_BINOP_AND, MIR_BINOP_OR
+    }
+
+func lower_literal_to_mir(text: String) String
+    t := axon_string_trim(text)
+    if axon_string_count(t, "") == 0:
+        return mir_make_unit_value()
+    if t == "true":
+        return mir_make_bool_value("true")
+    if t == "false":
+        return mir_make_bool_value("false")
+    if axon_string_starts_with(t, "\""):
+        return mir_make_string_value(t)
+    if axon_string_contains(t, "."):
+        return mir_make_float_value("f64", t)
+    return mir_make_int_value("i32", t)
+
+func lower_binop_to_mir(op: String, left_mir: String, right_mir: String) String
+    mir_op := lower_binop_name(op)
+    return mir_make_binop(mir_op, left_mir, right_mir)
+
+func lower_binop_name(op: String) String
+    if op == "+":
+        return MIR_BINOP_ADD()
+    if op == "-":
+        return MIR_BINOP_SUB()
+    if op == "*":
+        return MIR_BINOP_MUL()
+    if op == "/":
+        return MIR_BINOP_DIV()
+    if op == "%":
+        return MIR_BINOP_MOD()
+    if op == "==":
+        return MIR_BINOP_EQ()
+    if op == "!=":
+        return MIR_BINOP_NE()
+    if op == "<":
+        return MIR_BINOP_LT()
+    if op == ">":
+        return MIR_BINOP_GT()
+    if op == "<=":
+        return MIR_BINOP_LE()
+    if op == ">=":
+        return MIR_BINOP_GE()
+    if op == "&&":
+        return MIR_BINOP_AND()
+    if op == "||":
+        return MIR_BINOP_OR()
+    return "unknown_op"
+
+func lower_return_to_mir(value_mir: String) String
+    return mir_make_return(value_mir)
+
+func lower_return_void_to_mir() String
+    return mir_make_return_void()
+
+func lower_func_header_to_mir(name: String, params: String, return_type: String) String
+    return mir_make_func(name, params, return_type, "")
+
+func lower_if_to_mir(cond_mir: String, then_label: String, else_label: String, merge_label: String) String
+    branch := mir_make_branch(cond_mir, then_label, else_label)
+    merge := mir_make_goto(merge_label)
+    return mir_encode3(branch, "|", merge)
+
+func lower_call_to_mir(callee: String, args: String) String
+    return mir_make_call_expr(callee, args)
+
+func lower_goto_to_mir(label: String) String
+    return mir_make_goto(label)
+
+func lower_assign_to_mir(target_id: String, value_mir: String) String
+    return mir_make_assign(target_id, value_mir)
+
+func lower_local_ref(id: String) String
+    return mir_make_local(id)
+
 func _ir_lower_rust_moved() void
     return

@@ -1,41 +1,139 @@
+import
+    compiler/complex_types/string { string_len }
+
 // Axon-native lexer. Tokenization truth lives here.
 // The sidecar (lexer.rs) handles file I/O; unknown-token rejection mirrors classify_token rules.
+
+// --- Character classification ---
+
 pub func is_identifier_char(c: String) bool
     if c == "_":
         return true
     byte := axon_string_byte_at(c, 0)
     return (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
 
+pub func is_alpha_char(c: String) bool
+    byte := axon_string_byte_at(c, 0)
+    return (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
+
 pub func is_digit_char(c: String) bool
     byte := axon_string_byte_at(c, 0)
     return byte >= 48 && byte <= 57
 
-pub func is_keyword(token: String) bool
-    match token:
+func is_whitespace(c: String) bool
+    return c == " " || c == "\t" || c == "\r" || c == "\n"
+
+func is_ident_continue(c: String) bool
+    if c == "_":
+        return true
+    byte := axon_string_byte_at(c, 0)
+    return (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
+
+// --- Keyword classification ---
+
+func keyword_to_token_kind(text: String) String
+    match text:
         "func":
-            return true
-        "pub":
-            return true
-        "import":
-            return true
-        "return":
-            return true
-        "if":
-            return true
-        "elif":
-            return true
-        "else":
-            return true
-        "mut":
-            return true
-        "for":
-            return true
-        "while":
-            return true
+            return TOKEN_KW_FUNC()
+        "method":
+            return TOKEN_KW_METHOD()
+        "type":
+            return TOKEN_KW_TYPE()
+        "struct":
+            return TOKEN_KW_STRUCT()
+        "enum":
+            return TOKEN_KW_ENUM()
+        "trait":
+            return TOKEN_KW_TRAIT()
+        "error":
+            return TOKEN_KW_ERROR()
         "test":
-            return true
+            return TOKEN_KW_TEST()
+        "mut":
+            return TOKEN_KW_MUT()
+        "if":
+            return TOKEN_KW_IF()
+        "elif":
+            return TOKEN_KW_ELIF()
+        "else":
+            return TOKEN_KW_ELSE()
+        "for":
+            return TOKEN_KW_FOR()
+        "in":
+            return TOKEN_KW_IN()
+        "while":
+            return TOKEN_KW_WHILE()
+        "break":
+            return TOKEN_KW_BREAK()
+        "continue":
+            return TOKEN_KW_CONTINUE()
+        "match":
+            return TOKEN_KW_MATCH()
+        "return":
+            return TOKEN_KW_RETURN()
+        "ref":
+            return TOKEN_KW_REF()
+        "async":
+            return TOKEN_KW_ASYNC()
+        "await":
+            return TOKEN_KW_AWAIT()
+        "shared":
+            return TOKEN_KW_SHARED()
+        "buffer":
+            return TOKEN_KW_BUFFER()
+        "defer":
+            return TOKEN_KW_DEFER()
+        "errdefer":
+            return TOKEN_KW_ERRDEFER()
+        "self":
+            return TOKEN_KW_SELF()
+        "and":
+            return TOKEN_KW_AND()
+        "or":
+            return TOKEN_KW_OR()
+        "not":
+            return TOKEN_KW_NOT()
+        "nil":
+            return TOKEN_KW_NIL()
+        "try":
+            return TOKEN_KW_TRY()
+        "catch":
+            return TOKEN_KW_CATCH()
+        "orelse":
+            return TOKEN_KW_ORELSE()
+        "ordefault":
+            return TOKEN_KW_ORDEFAULT()
+        "import":
+            return TOKEN_KW_IMPORT()
+        "include":
+            return TOKEN_KW_INCLUDE()
+        "pub":
+            return TOKEN_KW_PUB()
+        "project":
+            return TOKEN_KW_PROJECT()
+        "bin":
+            return TOKEN_KW_BIN()
+        "deps":
+            return TOKEN_KW_DEPS()
+        "rust":
+            return TOKEN_KW_RUST()
+        "rust_deps":
+            return TOKEN_KW_RUST_DEPS()
+        "go":
+            return TOKEN_KW_GO()
+        "go_deps":
+            return TOKEN_KW_GO_DEPS()
+        "python_deps":
+            return TOKEN_KW_PYTHON_DEPS()
+        "end":
+            return TOKEN_KW_END()
         _:
-            return false
+            return ""
+
+pub func is_keyword(token: String) bool
+    return keyword_to_token_kind(token) != ""
+
+// --- Token classification (legacy coarse classifier) ---
 
 pub func classify_token(token: String) String
     trimmed := axon_string_trim(token)
@@ -56,6 +154,14 @@ pub func classify_token(token: String) String
             return "operator"
         ">=":
             return "operator"
+        "=>":
+            return "operator"
+        "+=":
+            return "operator"
+        "-=":
+            return "operator"
+        "..":
+            return "operator"
         _:
             first := axon_string_char_at(trimmed, 0)
             return classify_by_first_char(trimmed, first)
@@ -63,6 +169,8 @@ pub func classify_token(token: String) String
 func classify_by_first_char(token: String, first: String) String
     if first == "\"":
         return "string_literal"
+    if first == "'":
+        return "char_literal"
     if is_digit_char(first):
         return "int_literal"
     match first:
@@ -84,6 +192,10 @@ func classify_by_first_char(token: String, first: String) String
             return "delimiter"
         ".":
             return "delimiter"
+        ";":
+            return "delimiter"
+        "@":
+            return "delimiter"
         "=":
             return "operator"
         "!":
@@ -100,6 +212,14 @@ func classify_by_first_char(token: String, first: String) String
             return "operator"
         "/":
             return "operator"
+        "%":
+            return "operator"
+        "&":
+            return "operator"
+        "|":
+            return "operator"
+        "?":
+            return "operator"
         _:
             if is_identifier_char(first):
                 if is_keyword(token):
@@ -109,7 +229,282 @@ func classify_by_first_char(token: String, first: String) String
                 return "identifier"
             return "unknown"
 
-// Coarse count for Axon callers; project lex scans run in lexer.rs.
+// --- Single-token scanners ---
+
+func char_at(source: String, pos: i64) String
+    if pos < 0 || pos >= string_len(source):
+        return ""
+    return axon_string_char_at(source, pos)
+
+func peek_byte(source: String, pos: i64) i64
+    if pos < 0 || pos >= string_len(source):
+        return -1
+    return axon_string_byte_at(source, pos)
+
+pub func lex_skip_whitespace(source: String, pos: i64) i64
+    mut p: i64 = pos
+    mut len: i64 = string_len(source)
+    while p < len:
+        c := axon_string_char_at(source, p)
+        if c == " " || c == "\t":
+            p = p + 1
+        else:
+            return p
+    return p
+
+func lex_identifier_or_keyword(source: String, pos: i64) String
+    mut p: i64 = pos
+    mut len: i64 = string_len(source)
+    while p < len:
+        c := axon_string_char_at(source, p)
+        if is_ident_continue(c) == false:
+            break
+        p = p + 1
+    text := axon_string_sub(source, pos, p - pos)
+    kind := keyword_to_token_kind(text)
+    if kind != "":
+        if text == "true" || text == "false":
+            return token_make(TOKEN_BOOL(), text, pos, p)
+        return token_make(kind, text, pos, p)
+    if text == "true" || text == "false":
+        return token_make(TOKEN_BOOL(), text, pos, p)
+    if text == "nil":
+        return token_make(TOKEN_KW_NIL(), text, pos, p)
+    return token_make(TOKEN_IDENT(), text, pos, p)
+
+func lex_number(source: String, pos: i64) String
+    mut p: i64 = pos
+    mut len: i64 = string_len(source)
+    while p < len:
+        b := peek_byte(source, p)
+        if b < 48 || b > 57:
+            break
+        p = p + 1
+    if p < len && axon_string_char_at(source, p) == ".":
+        next := p + 1
+        if next < len:
+            nb := peek_byte(source, next)
+            if nb >= 48 && nb <= 57:
+                p = next
+                while p < len:
+                    b := peek_byte(source, p)
+                    if b < 48 || b > 57:
+                        break
+                    p = p + 1
+                text := axon_string_sub(source, pos, p - pos)
+                return token_make(TOKEN_FLOAT(), text, pos, p)
+    text := axon_string_sub(source, pos, p - pos)
+    return token_make(TOKEN_INT(), text, pos, p)
+
+func lex_string(source: String, pos: i64) String
+    mut p: i64 = pos + 1
+    mut len: i64 = string_len(source)
+    while p < len:
+        c := axon_string_char_at(source, p)
+        if c == "\\":
+            p = p + 2
+            continue
+        if c == "\"":
+            p = p + 1
+            text := axon_string_sub(source, pos, p - pos)
+            return token_make(TOKEN_STRING(), text, pos, p)
+        p = p + 1
+    text := axon_string_sub(source, pos, p - pos)
+    return token_make(TOKEN_ERROR(), text, pos, p)
+
+func lex_char_literal(source: String, pos: i64) String
+    mut p: i64 = pos + 1
+    mut len: i64 = string_len(source)
+    if p < len && axon_string_char_at(source, p) == "\\":
+        p = p + 2
+    else:
+        if p < len:
+            p = p + 1
+    if p < len && axon_string_char_at(source, p) == "'":
+        p = p + 1
+    text := axon_string_sub(source, pos, p - pos)
+    return token_make(TOKEN_CHAR(), text, pos, p)
+
+func lex_line_comment(source: String, pos: i64) String
+    mut p: i64 = pos + 2
+    mut len: i64 = string_len(source)
+    while p < len:
+        c := axon_string_char_at(source, p)
+        if c == "\n":
+            break
+        p = p + 1
+    text := axon_string_sub(source, pos, p - pos)
+    return token_make(TOKEN_COMMENT(), text, pos, p)
+
+func lex_block_comment(source: String, pos: i64) String
+    mut p: i64 = pos + 2
+    mut len: i64 = string_len(source)
+    while p < len:
+        c := axon_string_char_at(source, p)
+        if c == "*" && p + 1 < len && axon_string_char_at(source, p + 1) == "/":
+            p = p + 2
+            text := axon_string_sub(source, pos, p - pos)
+            return token_make(TOKEN_COMMENT(), text, pos, p)
+        p = p + 1
+    text := axon_string_sub(source, pos, p - pos)
+    return token_make(TOKEN_ERROR(), text, pos, p)
+
+func lex_operator(source: String, pos: i64) String
+    c := axon_string_char_at(source, pos)
+    len := string_len(source)
+    match c:
+        ":":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_COLON_EQ(), ":=", pos, pos + 2)
+            return token_make(TOKEN_COLON(), ":", pos, pos + 1)
+        "=":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == ">":
+                return token_make(TOKEN_FAT_ARROW(), "=>", pos, pos + 2)
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_EQ(), "==", pos, pos + 2)
+            return token_make(TOKEN_ASSIGN(), "=", pos, pos + 1)
+        "!":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_NE(), "!=", pos, pos + 2)
+            return token_make(TOKEN_BANG(), "!", pos, pos + 1)
+        "<":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_LE(), "<=", pos, pos + 2)
+            return token_make(TOKEN_LT(), "<", pos, pos + 1)
+        ">":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_GE(), ">=", pos, pos + 2)
+            return token_make(TOKEN_GT(), ">", pos, pos + 1)
+        "+":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_PLUS_EQ(), "+=", pos, pos + 2)
+            return token_make(TOKEN_PLUS(), "+", pos, pos + 1)
+        "-":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "=":
+                return token_make(TOKEN_MINUS_EQ(), "-=", pos, pos + 2)
+            return token_make(TOKEN_MINUS(), "-", pos, pos + 1)
+        "*":
+            return token_make(TOKEN_STAR(), "*", pos, pos + 1)
+        "/":
+            return token_make(TOKEN_SLASH(), "/", pos, pos + 1)
+        "%":
+            return token_make(TOKEN_PERCENT(), "%", pos, pos + 1)
+        "&":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "&":
+                return token_make(TOKEN_ANDAND(), "&&", pos, pos + 2)
+            return token_make(TOKEN_AMP(), "&", pos, pos + 1)
+        "|":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == "|":
+                return token_make(TOKEN_OROR(), "||", pos, pos + 2)
+            return token_make(TOKEN_PIPE(), "|", pos, pos + 1)
+        ".":
+            if pos + 1 < len && axon_string_char_at(source, pos + 1) == ".":
+                return token_make(TOKEN_DOT_DOT(), "..", pos, pos + 2)
+            return token_make(TOKEN_DOT(), ".", pos, pos + 1)
+        ",":
+            return token_make(TOKEN_COMMA(), ",", pos, pos + 1)
+        ";":
+            return token_make(TOKEN_SEMI(), ";", pos, pos + 1)
+        "?":
+            return token_make(TOKEN_QUESTION(), "?", pos, pos + 1)
+        "(":
+            return token_make(TOKEN_LPAREN(), "(", pos, pos + 1)
+        ")":
+            return token_make(TOKEN_RPAREN(), ")", pos, pos + 1)
+        "[":
+            return token_make(TOKEN_LBRACK(), "[", pos, pos + 1)
+        "]":
+            return token_make(TOKEN_RBRACK(), "]", pos, pos + 1)
+        "{":
+            return token_make(TOKEN_LBRACE(), "{", pos, pos + 1)
+        "}":
+            return token_make(TOKEN_RBRACE(), "}", pos, pos + 1)
+        "@":
+            return token_make(TOKEN_AT(), "@", pos, pos + 1)
+        _:
+            text := axon_string_sub(source, pos, 1)
+            return token_make(TOKEN_ERROR(), text, pos, pos + 1)
+
+// --- Main single-token dispatcher ---
+
+pub func lex_single_token(source: String, pos: i64) String
+    len := string_len(source)
+    if pos >= len:
+        return token_make(TOKEN_EOF(), "", pos, pos)
+    c := axon_string_char_at(source, pos)
+    if c == " " || c == "\t":
+        new_pos := lex_skip_whitespace(source, pos)
+        return lex_single_token(source, new_pos)
+    if c == "\n":
+        return token_make(TOKEN_NEWLINE(), "\n", pos, pos + 1)
+    if c == "\r":
+        if pos + 1 < len && axon_string_char_at(source, pos + 1) == "\n":
+            return token_make(TOKEN_NEWLINE(), "\r\n", pos, pos + 2)
+        return token_make(TOKEN_NEWLINE(), "\r", pos, pos + 1)
+    if c == "\"":
+        return lex_string(source, pos)
+    if c == "'":
+        return lex_char_literal(source, pos)
+    if c == "/" && pos + 1 < len:
+        next := axon_string_char_at(source, pos + 1)
+        if next == "/":
+            return lex_line_comment(source, pos)
+        if next == "*":
+            return lex_block_comment(source, pos)
+    if is_digit_char(c):
+        return lex_number(source, pos)
+    if is_alpha_char(c) || c == "_":
+        return lex_identifier_or_keyword(source, pos)
+    return lex_operator(source, pos)
+
+// --- Full source tokenization ---
+
+func collect_tokens(source: String, pos: i64, acc: String) String
+    len := string_len(source)
+    if pos >= len:
+        eof := token_make(TOKEN_EOF(), "", pos, pos)
+        if acc == "":
+            return eof
+        return acc + "\n" + eof
+    tok := lex_single_token(source, pos)
+    kind := token_kind(tok)
+    end := token_end(tok)
+    if kind == "error":
+        if acc == "":
+            return tok
+        return acc + "\n" + tok
+    if end <= pos:
+        return acc
+    new_acc := ""
+    if acc == "":
+        new_acc = tok
+    else:
+        new_acc = acc + "\n" + tok
+    return collect_tokens(source, end, new_acc)
+
+pub func lex_all_tokens(source: String) String
+    return collect_tokens(source, 0, "")
+
+// --- Indent level counting ---
+
+pub func lex_indent_level(line: String) i64
+    mut count: i64 = 0
+    mut i: i64 = 0
+    mut len: i64 = string_len(line)
+    while i < len:
+        c := axon_string_char_at(line, i)
+        if c == " ":
+            count = count + 1
+        else:
+            if c == "\t":
+                count = ((count / 4) + 1) * 4
+            else:
+                return count
+        i = i + 1
+    return count
+
+// --- Token count and validation (legacy) ---
+
 pub func validate_tokens(source: String) String
     if source == "":
         return "ok:tokens:0"
@@ -120,7 +515,7 @@ pub func validate_tokens(source: String) String
     newlines := axon_string_count(trimmed, "\n")
     tabs := axon_string_count(trimmed, "\t")
     count := spaces + newlines + tabs + 1
-    return "ok:tokens:" + count
+    return "ok:tokens:" + i64_to_string(count)
 
 pub func token_count_native(source: String) i64
     trimmed := axon_string_trim(source)

@@ -1,2 +1,51 @@
 pub func describe_project() String
     return "project:axon bin:axon main:./src/main.ax"
+
+pub func parse_build_manifest(content: String) String
+    project_name := extract_project_name(content)
+    binary_name := extract_binary_name(content)
+    main_entry := extract_main_entry(content)
+    return string_concat(string_concat(string_concat(string_concat("project:", project_name), " bin:"), binary_name), string_concat(" main:", main_entry))
+
+pub func extract_project_name(manifest: String) String
+    return scan_for_prefix_value(manifest, "project ")
+
+pub func extract_binary_name(manifest: String) String
+    return scan_for_prefix_value(manifest, "bin ")
+
+pub func extract_main_entry(manifest: String) String
+    return scan_for_prefix_value(manifest, "main:")
+
+func scan_for_prefix_value(manifest: String, prefix: String) String
+    total := axon_string_count(manifest, "\n") + 1
+    return scan_lines_for_prefix(manifest, prefix, 0, total)
+
+func scan_lines_for_prefix(manifest: String, prefix: String, idx: i64, total: i64) String
+    if idx >= total:
+        return ""
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if axon_string_starts_with(line, prefix):
+        prefix_len := axon_string_count(prefix, "")
+        rest := axon_string_sub(line, prefix_len, axon_string_count(line, "") - prefix_len)
+        return axon_string_trim(rest)
+    return scan_lines_for_prefix(manifest, prefix, idx + 1, total)
+
+func get_manifest_line(s: String, idx: i64) String
+    if idx == 0:
+        nl := axon_string_count(s, "\n") > 0
+        if nl == false:
+            return s
+        pos := find_first_nl(s, 0)
+        return axon_string_sub(s, 0, pos)
+    pos := find_first_nl(s, 0)
+    if pos < 0:
+        return ""
+    rest := axon_string_sub(s, pos + 1, axon_string_count(s, "") - pos - 1)
+    return get_manifest_line(rest, idx - 1)
+
+func find_first_nl(s: String, pos: i64) i64
+    if pos >= axon_string_count(s, ""):
+        return -1
+    if axon_string_char_at(s, pos) == "\n":
+        return pos
+    return find_first_nl(s, pos + 1)

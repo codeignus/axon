@@ -6,3 +6,9 @@ pub func compiler_error(kind: String, msg: String) String
 
 pub func internal_compiler_error(msg: String) String
     return diag_internal(msg)
+
+pub func type_error(msg: String) String
+    return diag_error("typecheck", msg)
+
+pub func type_mismatch_error(expected: String, actual: String, context: String) String
+    return diag_error("typecheck", "type mismatch: expected " + expected + ", got " + actual + " in " + context)

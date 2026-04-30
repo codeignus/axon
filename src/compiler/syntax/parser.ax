@@ -1,6 +1,8 @@
 // Axon-native parser. Structural analysis truth lives here.
 // The sidecar (parser.rs) handles file I/O; project checks use its string-aware balance.
 
+// --- Existing helpers (preserved for tests) ---
+
 pub func check_balance_simple(source: String) String
     opens := axon_string_count(source, "(") + axon_string_count(source, "[") + axon_string_count(source, "{")
     closes := axon_string_count(source, ")") + axon_string_count(source, "]") + axon_string_count(source, "}")
@@ -27,3 +29,563 @@ pub func count_test_declarations(source: String) i64
 
 pub func count_return_statements(source: String) i64
     return axon_string_count(source, "return ")
+
+// --- Token stream helpers ---
+// Tokens are newline-separated, each encoded as "kind|text|start|end".
+
+func str_len(s: String) i64
+    return axon_string_count(s, "")
+
+func find_newline_pos(s: String, pos: i64, len: i64) i64
+    if pos >= len:
+        return -1
+    if axon_string_char_at(s, pos) == "\n":
+        return pos
+    return find_newline_pos(s, pos + 1, len)
+
+pub func token_stream_count(tokens: String) i64
+    if tokens == "":
+        return 0
+    return axon_string_count(tokens, "\n") + 1
+
+func token_at_rec(tokens: String, target: i64, current: i64) String
+    if tokens == "":
+        return ""
+    if current == target:
+        nl := find_newline_pos(tokens, 0, str_len(tokens))
+        if nl < 0:
+            return tokens
+        return axon_string_sub(tokens, 0, nl)
+    nl := find_newline_pos(tokens, 0, str_len(tokens))
+    if nl < 0:
+        return ""
+    rest := axon_string_sub(tokens, nl + 1, str_len(tokens) - nl - 1)
+    return token_at_rec(rest, target, current + 1)
+
+pub func token_at(tokens: String, index: i64) String
+    return token_at_rec(tokens, index, 0)
+
+func token_kind_at(tokens: String, index: i64) String
+    t := token_at(tokens, index)
+    if t == "":
+        return ""
+    return token_kind(t)
+
+func token_text_at(tokens: String, index: i64) String
+    t := token_at(tokens, index)
+    if t == "":
+        return ""
+    return token_text(t)
+
+func is_top_level_keyword(kind: String) bool
+    if kind == TOKEN_KW_FUNC():
+        return true
+    if kind == TOKEN_KW_METHOD():
+        return true
+    if kind == TOKEN_KW_STRUCT():
+        return true
+    if kind == TOKEN_KW_ENUM():
+        return true
+    if kind == TOKEN_KW_TRAIT():
+        return true
+    if kind == TOKEN_KW_TYPE():
+        return true
+    if kind == TOKEN_KW_IMPORT():
+        return true
+    if kind == TOKEN_KW_TEST():
+        return true
+    if kind == TOKEN_KW_ERROR():
+        return true
+    if kind == TOKEN_KW_PUB():
+        return true
+    return false
+
+// --- Matching bracket scanner ---
+
+func find_matching_close_rec(tokens: String, pos: i64, open_kind: String, close_kind: String, depth: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return -1
+    if kind == open_kind:
+        return find_matching_close_rec(tokens, pos + 1, open_kind, close_kind, depth + 1)
+    if kind == close_kind:
+        if depth == 1:
+            return pos
+        return find_matching_close_rec(tokens, pos + 1, open_kind, close_kind, depth - 1)
+    return find_matching_close_rec(tokens, pos + 1, open_kind, close_kind, depth)
+
+func find_matching_close(tokens: String, pos: i64, open_kind: String, close_kind: String) i64
+    return find_matching_close_rec(tokens, pos + 1, open_kind, close_kind, 1)
+
+// --- Skip past a balanced block (indent...dedent) ---
+
+func find_dedent_after(tokens: String, pos: i64, depth: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return pos
+    if kind == TOKEN_INDENT():
+        result := find_dedent_after(tokens, pos + 1, depth + 1)
+        return result
+    if kind == TOKEN_DEDENT():
+        if depth == 1:
+            return pos
+        return find_dedent_after(tokens, pos + 1, depth - 1)
+    return find_dedent_after(tokens, pos + 1, depth)
+
+// --- Parse function header ---
+
+func parse_func_header_rec(tokens: String, pos: i64, is_pub: i64) String
+    kind := token_kind_at(tokens, pos)
+    if is_pub == 1:
+        if kind != TOKEN_KW_FUNC():
+            if kind == TOKEN_KW_METHOD():
+                return parse_method_header(tokens, pos)
+            return ""
+        return parse_func_name_and_params(tokens, pos + 1)
+    if kind == TOKEN_KW_PUB():
+        return parse_func_header_rec(tokens, pos + 1, 1)
+    if kind == TOKEN_KW_FUNC():
+        return parse_func_name_and_params(tokens, pos + 1)
+    if kind == TOKEN_KW_METHOD():
+        return parse_method_header(tokens, pos)
+    return ""
+
+func func_header_result(name: String, param_count: i64, return_type: String) String
+    base := node_make(NODE_FUNC_DECL(), "name=" + name + ";params=" + i64_to_string(param_count))
+    if return_type != "":
+        return node_append_child(base, "ret=" + return_type)
+    return base
+
+func parse_func_name_and_params(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    next := token_kind_at(tokens, pos + 1)
+    if next != TOKEN_LPAREN():
+        return ""
+    rparen := find_matching_close(tokens, pos + 1, TOKEN_LPAREN(), TOKEN_RPAREN())
+    if rparen < 0:
+        return ""
+    param_count := count_params_in_range(tokens, pos + 2, rparen)
+    return_type := parse_return_type(tokens, rparen + 1)
+    return func_header_result(name, param_count, return_type)
+
+func method_header_result(name: String, param_count: i64, return_type: String) String
+    base := node_make(NODE_METHOD_DECL(), "name=" + name + ";params=" + i64_to_string(param_count))
+    if return_type != "":
+        return node_append_child(base, "ret=" + return_type)
+    return base
+
+func parse_method_header(tokens: String, pos: i64) String
+    pos := pos + 1
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    next := token_kind_at(tokens, pos + 1)
+    if next != TOKEN_LPAREN():
+        return ""
+    rparen := find_matching_close(tokens, pos + 1, TOKEN_LPAREN(), TOKEN_RPAREN())
+    if rparen < 0:
+        return ""
+    param_count := count_params_in_range(tokens, pos + 2, rparen)
+    return_type := parse_return_type(tokens, rparen + 1)
+    return method_header_result(name, param_count, return_type)
+
+func count_params_in_range(tokens: String, pos: i64, end: i64) i64
+    if pos >= end:
+        return 0
+    return count_params_rec(tokens, pos, end, 0, 1)
+
+func count_params_rec(tokens: String, pos: i64, end: i64, depth: i64, count: i64) i64
+    if pos >= end:
+        return count
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_LPAREN():
+        return count_params_rec(tokens, pos + 1, end, depth + 1, count)
+    if kind == TOKEN_RPAREN():
+        return count_params_rec(tokens, pos + 1, end, depth - 1, count)
+    if kind == TOKEN_COMMA() && depth == 0:
+        return count_params_rec(tokens, pos + 1, end, depth, count + 1)
+    return count_params_rec(tokens, pos + 1, end, depth, count)
+
+func parse_return_type(tokens: String, pos: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_COLON():
+        return parse_type_from(tokens, pos + 1)
+    if kind == TOKEN_INDENT() || kind == TOKEN_NEWLINE() || kind == TOKEN_EOF() || kind == "":
+        return ""
+    return ""
+
+func parse_type_from(tokens: String, pos: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_IDENT():
+        text := token_text_at(tokens, pos)
+        next := token_kind_at(tokens, pos + 1)
+        if next == TOKEN_LT():
+            inner_end := find_matching_close(tokens, pos + 1, TOKEN_LT(), TOKEN_GT())
+            if inner_end < 0:
+                return text
+            return text + "<" + parse_type_from(tokens, pos + 2) + ">"
+        if next == TOKEN_LBRACK():
+            inner_end := find_matching_close(tokens, pos + 1, TOKEN_LBRACK(), TOKEN_RBRACK())
+            if inner_end < 0:
+                return text + "[]"
+            return text + "[]"
+        return text
+    if kind == TOKEN_LPAREN():
+        rparen := find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
+        if rparen < 0:
+            return ""
+        return "(" + collect_types_in_parens(tokens, pos + 1, rparen) + ")"
+    if kind == TOKEN_QUESTION():
+        inner := parse_type_from(tokens, pos + 1)
+        return "?" + inner
+    if kind == TOKEN_STAR():
+        inner := parse_type_from(tokens, pos + 1)
+        return "*" + inner
+    if kind == TOKEN_BANG():
+        inner := parse_type_from(tokens, pos + 1)
+        return "!" + inner
+    return ""
+
+func collect_types_in_parens(tokens: String, pos: i64, end: i64) String
+    if pos >= end:
+        return ""
+    first := parse_type_from(tokens, pos)
+    if first == "":
+        return ""
+    next_pos := skip_type_tokens(tokens, pos, end)
+    rest := collect_types_in_parens(tokens, next_pos, end)
+    if rest == "":
+        return first
+    return first + "," + rest
+
+func skip_type_tokens(tokens: String, pos: i64, limit: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return limit
+    if kind == TOKEN_IDENT():
+        next := token_kind_at(tokens, pos + 1)
+        if next == TOKEN_LT():
+            inner_end := find_matching_close(tokens, pos + 1, TOKEN_LT(), TOKEN_GT())
+            if inner_end < 0:
+                return pos + 2
+            comma := token_kind_at(tokens, inner_end + 1)
+            if comma == TOKEN_COMMA():
+                return inner_end + 2
+            return inner_end + 1
+        if next == TOKEN_LBRACK():
+            inner_end := find_matching_close(tokens, pos + 1, TOKEN_LBRACK(), TOKEN_RBRACK())
+            if inner_end < 0:
+                return pos + 2
+            comma := token_kind_at(tokens, inner_end + 1)
+            if comma == TOKEN_COMMA():
+                return inner_end + 2
+            return inner_end + 1
+        comma := token_kind_at(tokens, pos + 1)
+        if comma == TOKEN_COMMA():
+            return pos + 2
+        return pos + 1
+    if kind == TOKEN_LPAREN():
+        rparen := find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
+        if rparen < 0:
+            return pos + 2
+        comma := token_kind_at(tokens, rparen + 1)
+        if comma == TOKEN_COMMA():
+            return rparen + 2
+        return rparen + 1
+    if kind == TOKEN_QUESTION() || kind == TOKEN_STAR() || kind == TOKEN_BANG():
+        inner := skip_type_tokens(tokens, pos + 1, limit)
+        return inner
+    return pos + 1
+
+pub func parse_func_header(tokens: String, pos: i64) String
+    return parse_func_header_rec(tokens, pos, 0)
+
+// --- Parse import ---
+
+pub func parse_import_spec(tokens: String, pos: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind != TOKEN_KW_IMPORT():
+        return ""
+    path := parse_import_path(tokens, pos + 1)
+    if path == "":
+        return ""
+    return node_make(NODE_IMPORT_DECL(), path)
+
+func parse_import_path(tokens: String, pos: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_IDENT():
+        text := token_text_at(tokens, pos)
+        next := token_kind_at(tokens, pos + 1)
+        if next == TOKEN_SLASH():
+            rest := parse_import_path(tokens, pos + 2)
+            return text + "/" + rest
+        if next == TOKEN_LBRACE():
+            close := find_matching_close(tokens, pos + 1, TOKEN_LBRACE(), TOKEN_RBRACE())
+            if close < 0:
+                return text
+            names := collect_import_names(tokens, pos + 2, close)
+            return text + "{" + names + "}"
+        return text
+    return ""
+
+func collect_import_names(tokens: String, pos: i64, end: i64) String
+    if pos >= end:
+        return ""
+    kind := token_kind_at(tokens, pos)
+    if kind != TOKEN_IDENT():
+        return ""
+    name := token_text_at(tokens, pos)
+    next := token_kind_at(tokens, pos + 1)
+    if next == TOKEN_COMMA():
+        rest := collect_import_names(tokens, pos + 2, end)
+        return name + "," + rest
+    return name
+
+// --- Parse top-level declaration ---
+
+func parse_func_body_end(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_INDENT():
+        dedent := find_dedent_after(tokens, pos, 0)
+        return dedent + 1
+    if kind == TOKEN_NEWLINE():
+        return pos + 1
+    if kind == TOKEN_EOF() || kind == "":
+        return pos
+    return pos + 1
+
+pub func parse_top_level_decl(tokens: String, pos: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return ""
+    if kind == TOKEN_KW_PUB():
+        inner := token_kind_at(tokens, pos + 1)
+        if inner == TOKEN_KW_FUNC():
+            header := parse_func_name_and_params(tokens, pos + 2)
+            return header
+        if inner == TOKEN_KW_STRUCT():
+            return parse_struct_decl(tokens, pos + 2)
+        if inner == TOKEN_KW_ENUM():
+            return parse_enum_decl(tokens, pos + 2)
+        if inner == TOKEN_KW_TRAIT():
+            return parse_trait_decl(tokens, pos + 2)
+        return ""
+    if kind == TOKEN_KW_FUNC():
+        header := parse_func_name_and_params(tokens, pos + 1)
+        return header
+    if kind == TOKEN_KW_METHOD():
+        return parse_method_header(tokens, pos)
+    if kind == TOKEN_KW_IMPORT():
+        return parse_import_spec(tokens, pos)
+    if kind == TOKEN_KW_STRUCT():
+        return parse_struct_decl(tokens, pos + 1)
+    if kind == TOKEN_KW_ENUM():
+        return parse_enum_decl(tokens, pos + 1)
+    if kind == TOKEN_KW_TRAIT():
+        return parse_trait_decl(tokens, pos + 1)
+    if kind == TOKEN_KW_TYPE():
+        return parse_type_alias(tokens, pos + 1)
+    if kind == TOKEN_KW_ERROR():
+        return parse_error_decl(tokens, pos + 1)
+    if kind == TOKEN_KW_TEST():
+        return parse_test_decl_at(tokens, pos + 1)
+    return ""
+
+func find_body_end(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return pos
+    rparen := find_rparen_after_params(tokens, pos)
+    if rparen < 0:
+        return pos
+    after := token_kind_at(tokens, rparen + 1)
+    if after == TOKEN_COLON():
+        return parse_func_body_end(tokens, rparen + 2)
+    return parse_func_body_end(tokens, rparen + 1)
+
+func find_rparen_after_params(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return -1
+    if kind == TOKEN_LPAREN():
+        return find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
+    return find_rparen_after_params(tokens, pos + 1)
+
+// --- Struct/enum/trait/type/error/test declarations ---
+
+func parse_struct_decl(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    return node_make(NODE_STRUCT_DECL(), "name=" + name)
+
+func parse_enum_decl(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    return node_make(NODE_ENUM_DECL(), "name=" + name)
+
+func parse_trait_decl(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    return node_make(NODE_TRAIT_DECL(), "name=" + name)
+
+func parse_type_alias(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    eq := token_kind_at(tokens, pos + 1)
+    if eq != TOKEN_ASSIGN() && eq != TOKEN_EQ():
+        return ""
+    target := parse_type_from(tokens, pos + 2)
+    return node_make(NODE_TYPE_ALIAS(), "name=" + name + ";target=" + target)
+
+func parse_error_decl(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    return node_make(NODE_ERROR_DECL(), "name=" + name)
+
+func parse_test_decl_at(tokens: String, pos: i64) String
+    name := token_text_at(tokens, pos)
+    if name == "":
+        return ""
+    return node_make(NODE_TEST_DECL(), "name=" + name)
+
+// --- Count top-level declarations ---
+
+func count_top_decls_rec(tokens: String, pos: i64, count: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return count
+    if kind == TOKEN_KW_FUNC() || kind == TOKEN_KW_METHOD():
+        next_pos := skip_func_decl(tokens, pos)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_STRUCT():
+        next_pos := skip_past_name(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_ENUM():
+        next_pos := skip_past_name(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_TRAIT():
+        next_pos := skip_past_name(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_TYPE():
+        next_pos := skip_past_type_alias(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_IMPORT():
+        next_pos := skip_import(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_TEST():
+        next_pos := skip_past_body(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_ERROR():
+        next_pos := skip_past_name(tokens, pos + 1)
+        return count_top_decls_rec(tokens, next_pos, count + 1)
+    if kind == TOKEN_KW_PUB():
+        return count_top_decls_rec(tokens, pos + 1, count)
+    return count_top_decls_rec(tokens, pos + 1, count)
+
+func skip_past_ident(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_IDENT():
+        return pos + 1
+    return pos
+
+func skip_func_decl(tokens: String, pos: i64) i64
+    after_name := skip_past_ident(tokens, pos + 1)
+    rparen := find_rparen_after_params(tokens, after_name)
+    if rparen < 0:
+        return token_stream_count(tokens)
+    after := token_kind_at(tokens, rparen + 1)
+    if after == TOKEN_COLON():
+        return parse_func_body_end(tokens, rparen + 2)
+    return parse_func_body_end(tokens, rparen + 1)
+
+func skip_past_name(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == TOKEN_IDENT():
+        return skip_past_body(tokens, pos + 1)
+    return pos + 1
+
+func skip_past_type_alias(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind != TOKEN_IDENT():
+        return pos + 1
+    next := token_kind_at(tokens, pos + 1)
+    if next == TOKEN_ASSIGN() || next == TOKEN_EQ():
+        return pos + 3
+    return pos + 2
+
+func skip_import(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return pos
+    if kind == TOKEN_IDENT():
+        next := token_kind_at(tokens, pos + 1)
+        if next == TOKEN_SLASH():
+            return skip_import(tokens, pos + 2)
+        if next == TOKEN_LBRACE():
+            close := find_matching_close(tokens, pos + 1, TOKEN_LBRACE(), TOKEN_RBRACE())
+            if close < 0:
+                return pos + 2
+            return close + 1
+        return pos + 1
+    return pos
+
+func skip_past_body(tokens: String, pos: i64) i64
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        return pos
+    if kind == TOKEN_INDENT():
+        dedent := find_dedent_after(tokens, pos, 0)
+        return dedent + 1
+    if kind == TOKEN_COLON():
+        return skip_past_body(tokens, pos + 1)
+    return pos + 1
+
+pub func count_top_level_declarations(tokens: String) i64
+    return count_top_decls_rec(tokens, 0, 0)
+
+// --- Validate a single function declaration ---
+
+pub func validate_func_decl(tokens: String) String
+    return validate_func_decl_from(tokens, 0)
+
+func validate_func_decl_from(tokens: String, offset: i64) String
+    count := token_stream_count(tokens)
+    if count == 0:
+        return "error: empty token stream"
+    first := token_kind_at(tokens, offset)
+    if first == TOKEN_KW_PUB():
+        return validate_func_decl_from(tokens, offset + 1)
+    if first != TOKEN_KW_FUNC():
+        return "error: expected 'func' keyword"
+    name_pos := offset + 1
+    if name_pos >= count:
+        return "error: missing function name"
+    name := token_kind_at(tokens, name_pos)
+    if name != TOKEN_IDENT():
+        return "error: expected function name"
+    lparen_pos := name_pos + 1
+    if lparen_pos >= count:
+        return "error: missing parameter list"
+    if token_kind_at(tokens, lparen_pos) != TOKEN_LPAREN():
+        return "error: expected '(' after function name"
+    rparen := find_matching_close(tokens, lparen_pos, TOKEN_LPAREN(), TOKEN_RPAREN())
+    if rparen < 0:
+        return "error: unmatched '(' in parameter list"
+    if rparen + 1 < count:
+        after := token_kind_at(tokens, rparen + 1)
+        if after == TOKEN_COLON():
+            if rparen + 2 >= count:
+                return "error: missing return type after ':'"
+            ret_kind := token_kind_at(tokens, rparen + 2)
+            if ret_kind != TOKEN_IDENT() && ret_kind != TOKEN_LPAREN() && ret_kind != TOKEN_QUESTION():
+                return "error: invalid return type"
+        if after == TOKEN_INDENT():
+            return "ok"
+    return "ok"

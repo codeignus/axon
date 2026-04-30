@@ -11,7 +11,7 @@ import
 // Conditionals behave like inlined scopes with caller values "passed" in — outer bindings are inputs;
 // branches are analyzed independently (only one runs at runtime). Reassigning a `mut` slot in `if`
 // and again in `elif` is not two competing owners — it is updating the slot on mutually exclusive paths.
-// Enforcement: reverse-use assigns `MirFunc::owned_locals` per CFG path; see rust-backed-compiler-for-axon
+// Enforcement: reverse-use assigns `MirFunc::owned_locals` per CFG path; see bootstrap MIR ownership.
 // `axon-codegen` crate (`llvm_backend` module docs: Conditionals and mut); do not replace with line-scan heuristics.
 
 pub func validate_ownership_invariants() String

@@ -56,9 +56,9 @@ test classify_empty
     got := classify_token("")
     assert_eq(got, "empty")
 
-test classify_unknown
+test classify_at_sign
     got := classify_token("@")
-    assert_eq(got, "unknown")
+    assert_eq(got, "delimiter")
 
 test is_identifier_char_letter
     got := is_identifier_char("a")
@@ -95,3 +95,225 @@ test token_count_empty
 test token_count_simple
     got := token_count_native("func main()")
     assert_eq(got, 3)
+
+test token_make_extract_kind
+    t := token_make("ident", "foo", 0, 3)
+    assert_eq(token_kind(t), "ident")
+
+test token_make_extract_text
+    t := token_make("int", "42", 10, 12)
+    assert_eq(token_text(t), "42")
+
+test token_make_extract_start
+    t := token_make("ident", "bar", 5, 8)
+    assert_eq(token_start(t), 5)
+
+test token_make_extract_end
+    t := token_make("ident", "bar", 5, 8)
+    assert_eq(token_end(t), 8)
+
+test token_make_zero_positions
+    t := token_make("eof", "", 0, 0)
+    assert_eq(token_kind(t), "eof")
+    assert_eq(token_text(t), "")
+    assert_eq(token_start(t), 0)
+    assert_eq(token_end(t), 0)
+
+test token_make_large_positions
+    t := token_make("ident", "x", 1000, 1001)
+    assert_eq(token_start(t), 1000)
+    assert_eq(token_end(t), 1001)
+
+test i64_to_string_values
+    assert_eq(i64_to_string(0), "0")
+    assert_eq(i64_to_string(42), "42")
+    assert_eq(i64_to_string(1000), "1000")
+
+test string_to_i64_values
+    assert_eq(string_to_i64("0"), 0)
+    assert_eq(string_to_i64("42"), 42)
+    assert_eq(string_to_i64("1000"), 1000)
+
+test token_keyword_constants
+    assert_eq(TOKEN_KW_FUNC(), "kw_func")
+    assert_eq(TOKEN_KW_RETURN(), "kw_return")
+    assert_eq(TOKEN_FAT_ARROW(), "fat_arrow")
+    assert_eq(TOKEN_ANDAND(), "andand")
+    assert_eq(TOKEN_SEMI(), "semi")
+    assert_eq(TOKEN_PLUS_EQ(), "plus_eq")
+
+test token_roundtrip_encoding
+    t := token_make(TOKEN_KW_IF(), "if", 7, 9)
+    assert_eq(token_kind(t), "kw_if")
+    assert_eq(token_text(t), "if")
+    assert_eq(token_start(t), 7)
+    assert_eq(token_end(t), 9)
+
+// --- Single-token scanner tests ---
+
+test lex_single_token_keyword
+    tok := lex_single_token("func main()", 0)
+    assert_eq(token_kind(tok), "kw_func")
+    assert_eq(token_text(tok), "func")
+    assert_eq(token_start(tok), 0)
+    assert_eq(token_end(tok), 4)
+
+test lex_single_token_identifier
+    tok := lex_single_token("hello world", 0)
+    assert_eq(token_kind(tok), "ident")
+    assert_eq(token_text(tok), "hello")
+
+test lex_single_token_int
+    tok := lex_single_token("42 + 3", 0)
+    assert_eq(token_kind(tok), "int")
+    assert_eq(token_text(tok), "42")
+
+test lex_single_token_float
+    tok := lex_single_token("3.14", 0)
+    assert_eq(token_kind(tok), "float")
+    assert_eq(token_text(tok), "3.14")
+
+test lex_single_token_string
+    tok := lex_single_token("\"hello\"", 0)
+    assert_eq(token_kind(tok), "string")
+    assert_eq(token_text(tok), "\"hello\"")
+
+test lex_single_token_string_with_escape
+    tok := lex_single_token("\"he\\\"llo\"", 0)
+    assert_eq(token_kind(tok), "string")
+    assert_eq(token_text(tok), "\"he\\\"llo\"")
+
+test lex_single_token_char
+    tok := lex_single_token("'a'", 0)
+    assert_eq(token_kind(tok), "char")
+    assert_eq(token_text(tok), "'a'")
+
+test lex_single_token_colon_eq
+    tok := lex_single_token("x := 5", 2)
+    assert_eq(token_kind(tok), "colon_eq")
+    assert_eq(token_text(tok), ":=")
+
+test lex_single_token_fat_arrow
+    tok := lex_single_token("=>", 0)
+    assert_eq(token_kind(tok), "fat_arrow")
+    assert_eq(token_text(tok), "=>")
+
+test lex_single_token_andand
+    tok := lex_single_token("&&", 0)
+    assert_eq(token_kind(tok), "andand")
+
+test lex_single_token_oror
+    tok := lex_single_token("||", 0)
+    assert_eq(token_kind(tok), "oror")
+
+test lex_single_token_lparen
+    tok := lex_single_token("(", 0)
+    assert_eq(token_kind(tok), "lparen")
+
+test lex_single_token_rparen
+    tok := lex_single_token(")", 0)
+    assert_eq(token_kind(tok), "rparen")
+
+test lex_single_token_at
+    tok := lex_single_token("@rust", 0)
+    assert_eq(token_kind(tok), "at")
+
+test lex_single_token_line_comment
+    tok := lex_single_token("// this is a comment\nx", 0)
+    assert_eq(token_kind(tok), "comment")
+    assert_eq(token_text(tok), "// this is a comment")
+
+test lex_single_token_block_comment
+    tok := lex_single_token("/* block */x", 0)
+    assert_eq(token_kind(tok), "comment")
+    assert_eq(token_text(tok), "/* block */")
+
+test lex_single_token_dot_dot
+    tok := lex_single_token("..", 0)
+    assert_eq(token_kind(tok), "dot_dot")
+
+test lex_single_token_eof
+    tok := lex_single_token("", 0)
+    assert_eq(token_kind(tok), "eof")
+
+test lex_single_token_skip_whitespace
+    tok := lex_single_token("   func", 0)
+    assert_eq(token_kind(tok), "kw_func")
+    assert_eq(token_start(tok), 3)
+
+test lex_single_token_newline
+    tok := lex_single_token("\nfunc", 0)
+    assert_eq(token_kind(tok), "newline")
+    assert_eq(token_text(tok), "\n")
+
+test lex_single_token_bool_true
+    tok := lex_single_token("true", 0)
+    assert_eq(token_kind(tok), "bool")
+
+test lex_single_token_bool_false
+    tok := lex_single_token("false", 0)
+    assert_eq(token_kind(tok), "bool")
+
+test lex_single_token_nil
+    tok := lex_single_token("nil", 0)
+    assert_eq(token_kind(tok), "kw_nil")
+
+test lex_single_token_plus_eq
+    tok := lex_single_token("+=", 0)
+    assert_eq(token_kind(tok), "plus_eq")
+
+test lex_single_token_minus_eq
+    tok := lex_single_token("-=", 0)
+    assert_eq(token_kind(tok), "minus_eq")
+
+// --- Full tokenization tests ---
+
+test lex_all_tokens_simple
+    tokens := lex_all_tokens("func main()")
+    first := token_kind(lex_single_token(tokens, 0))
+    assert_eq(first, "kw_func")
+
+test lex_all_tokens_empty_source
+    tokens := lex_all_tokens("")
+    assert_eq(token_kind(tokens), "eof")
+
+test lex_all_tokens_func_decl
+    tokens := lex_all_tokens("pub func foo()")
+    lines := axon_string_count(tokens, "\n")
+    assert_eq(lines + 1, 6)
+
+// --- Indent level tests ---
+
+test lex_indent_level_zero
+    assert_eq(lex_indent_level("hello"), 0)
+
+test lex_indent_level_four
+    assert_eq(lex_indent_level("    x"), 4)
+
+test lex_indent_level_eight
+    assert_eq(lex_indent_level("        y"), 8)
+
+test lex_indent_level_empty
+    assert_eq(lex_indent_level(""), 0)
+
+// --- Extended keyword coverage ---
+
+test is_keyword_match
+    assert_eq(is_keyword("match"), true)
+
+test is_keyword_struct
+    assert_eq(is_keyword("struct"), true)
+
+test is_keyword_enum
+    assert_eq(is_keyword("enum"), true)
+
+test is_keyword_defer
+    assert_eq(is_keyword("defer"), true)
+
+test is_keyword_self
+    assert_eq(is_keyword("self"), true)
+
+test classify_keyword_extended
+    assert_eq(classify_token("match"), "keyword")
+    assert_eq(classify_token("struct"), "keyword")
+    assert_eq(classify_token("defer"), "keyword")

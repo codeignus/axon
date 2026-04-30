@@ -1,5 +1,7 @@
 // Golden parse tests for the Axon-native parser.
 
+// --- Existing tests ---
+
 test balance_simple_balanced
     got := check_balance_simple("func main() { return 0 }")
     assert_eq(got, "ok")
@@ -45,3 +47,228 @@ test count_returns
     source := "func hello() String\n    return \"a\"\n"
     got := count_return_statements(source)
     assert_eq(got, 1)
+
+// --- Token stream helper tests ---
+
+test token_stream_count_empty
+    got := token_stream_count("")
+    assert_eq(got, 0)
+
+test token_stream_count_single
+    t := token_make("kw_func", "func", 0, 4)
+    got := token_stream_count(t)
+    assert_eq(got, 1)
+
+test token_stream_count_multiple
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "main", 5, 9)
+    t3 := token_make("lparen", "(", 9, 10)
+    stream := t1 + "\n" + t2 + "\n" + t3
+    got := token_stream_count(stream)
+    assert_eq(got, 3)
+
+test token_at_first
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "main", 5, 9)
+    stream := t1 + "\n" + t2
+    got := token_at(stream, 0)
+    assert_eq(got, t1)
+
+test token_at_second
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "main", 5, 9)
+    stream := t1 + "\n" + t2
+    got := token_at(stream, 1)
+    assert_eq(got, t2)
+
+test token_at_out_of_bounds
+    t := token_make("kw_func", "func", 0, 4)
+    got := token_at(t, 5)
+    assert_eq(got, "")
+
+// --- Parse function header tests ---
+
+test parse_func_header_simple
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "hello", 5, 10)
+    t3 := token_make("lparen", "(", 10, 11)
+    t4 := token_make("rparen", ")", 11, 12)
+    t5 := token_make("colon", ":", 12, 13)
+    t6 := token_make("ident", "String", 13, 19)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6
+    got := parse_func_header(stream, 0)
+    expected := node_make(NODE_FUNC_DECL(), "name=hello;params=0")
+    expected := node_append_child(expected, "ret=String")
+    assert_eq(got, expected)
+
+test parse_func_header_with_params
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "add", 5, 8)
+    t3 := token_make("lparen", "(", 8, 9)
+    t4 := token_make("ident", "a", 9, 10)
+    t5 := token_make("colon", ":", 10, 11)
+    t6 := token_make("ident", "i64", 11, 14)
+    t7 := token_make("comma", ",", 14, 15)
+    t8 := token_make("ident", "b", 16, 17)
+    t9 := token_make("colon", ":", 17, 18)
+    t10 := token_make("ident", "i64", 18, 21)
+    t11 := token_make("rparen", ")", 21, 22)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6 + "\n" + t7 + "\n" + t8 + "\n" + t9 + "\n" + t10 + "\n" + t11
+    got := parse_func_header(stream, 0)
+    expected := node_make(NODE_FUNC_DECL(), "name=add;params=2")
+    assert_eq(got, expected)
+
+test parse_func_header_pub
+    t1 := token_make("kw_pub", "pub", 0, 3)
+    t2 := token_make("kw_func", "func", 4, 8)
+    t3 := token_make("ident", "main", 9, 13)
+    t4 := token_make("lparen", "(", 13, 14)
+    t5 := token_make("rparen", ")", 14, 15)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5
+    got := parse_func_header(stream, 0)
+    expected := node_make(NODE_FUNC_DECL(), "name=main;params=0")
+    assert_eq(got, expected)
+
+// --- Parse import spec tests ---
+
+test parse_import_spec_simple
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "foo", 7, 10)
+    stream := t1 + "\n" + t2
+    got := parse_import_spec(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "foo")
+    assert_eq(got, expected)
+
+test parse_import_spec_path
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "compiler", 7, 15)
+    t3 := token_make("slash", "/", 15, 16)
+    t4 := token_make("ident", "syntax", 16, 22)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4
+    got := parse_import_spec(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "compiler/syntax")
+    assert_eq(got, expected)
+
+test parse_import_spec_with_selector
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "compiler", 7, 15)
+    t3 := token_make("slash", "/", 15, 16)
+    t4 := token_make("ident", "diagnostics", 16, 27)
+    t5 := token_make("lbrace", "{", 28, 29)
+    t6 := token_make("ident", "message_is_error", 30, 46)
+    t7 := token_make("rbrace", "}", 47, 48)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6 + "\n" + t7
+    got := parse_import_spec(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "compiler/diagnostics{message_is_error}")
+    assert_eq(got, expected)
+
+// --- Count top-level declarations tests ---
+
+test count_top_level_decls_empty
+    got := count_top_level_declarations("")
+    assert_eq(got, 0)
+
+test count_top_level_decls_func
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "main", 5, 9)
+    t3 := token_make("lparen", "(", 9, 10)
+    t4 := token_make("rparen", ")", 10, 11)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4
+    got := count_top_level_declarations(stream)
+    assert_eq(got, 1)
+
+test count_top_level_decls_multiple
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "foo", 7, 10)
+    t3 := token_make("kw_func", "func", 11, 15)
+    t4 := token_make("ident", "main", 16, 20)
+    t5 := token_make("lparen", "(", 20, 21)
+    t6 := token_make("rparen", ")", 21, 22)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6
+    got := count_top_level_declarations(stream)
+    assert_eq(got, 2)
+
+// --- Parse top-level declaration tests ---
+
+test parse_top_level_decl_func
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "hello", 5, 10)
+    t3 := token_make("lparen", "(", 10, 11)
+    t4 := token_make("rparen", ")", 11, 12)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_FUNC_DECL(), "name=hello;params=0")
+    assert_eq(got, expected)
+
+test parse_top_level_decl_import
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "foo", 7, 10)
+    stream := t1 + "\n" + t2
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "foo")
+    assert_eq(got, expected)
+
+test parse_top_level_decl_struct
+    t1 := token_make("kw_struct", "struct", 0, 6)
+    t2 := token_make("ident", "Point", 7, 12)
+    stream := t1 + "\n" + t2
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_STRUCT_DECL(), "name=Point")
+    assert_eq(got, expected)
+
+test parse_top_level_decl_enum
+    t1 := token_make("kw_enum", "enum", 0, 4)
+    t2 := token_make("ident", "Color", 5, 10)
+    stream := t1 + "\n" + t2
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_ENUM_DECL(), "name=Color")
+    assert_eq(got, expected)
+
+// --- Validate function declaration tests ---
+
+test validate_func_decl_simple
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "main", 5, 9)
+    t3 := token_make("lparen", "(", 9, 10)
+    t4 := token_make("rparen", ")", 10, 11)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4
+    got := validate_func_decl(stream)
+    assert_eq(got, "ok")
+
+test validate_func_decl_empty
+    got := validate_func_decl("")
+    assert_eq(got, "error: empty token stream")
+
+test validate_func_decl_missing_name
+    t1 := token_make("kw_func", "func", 0, 4)
+    stream := t1
+    got := validate_func_decl(stream)
+    assert_eq(got, "error: missing function name")
+
+test validate_func_decl_missing_paren
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "main", 5, 9)
+    stream := t1 + "\n" + t2
+    got := validate_func_decl(stream)
+    assert_eq(got, "error: missing parameter list")
+
+test validate_func_decl_with_return_type
+    t1 := token_make("kw_func", "func", 0, 4)
+    t2 := token_make("ident", "hello", 5, 10)
+    t3 := token_make("lparen", "(", 10, 11)
+    t4 := token_make("rparen", ")", 11, 12)
+    t5 := token_make("colon", ":", 12, 13)
+    t6 := token_make("ident", "String", 13, 19)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6
+    got := validate_func_decl(stream)
+    assert_eq(got, "ok")
+
+test validate_func_decl_pub
+    t1 := token_make("kw_pub", "pub", 0, 3)
+    t2 := token_make("kw_func", "func", 4, 8)
+    t3 := token_make("ident", "main", 9, 13)
+    t4 := token_make("lparen", "(", 13, 14)
+    t5 := token_make("rparen", ")", 14, 15)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5
+    got := validate_func_decl(stream)
+    assert_eq(got, "ok")

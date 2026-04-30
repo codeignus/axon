@@ -1,24 +1,22 @@
-fn parse_declared_return_type(line: &str) -> Option<String> {
-    let func_part = if let Some(rest) = line.strip_prefix("func ") {
-        rest
-    } else {
-        line.strip_prefix("pub func ")?
-    };
-    let close = func_part.rfind(')')?;
-    let tail = func_part[close + 1..].trim();
-    if tail.is_empty() {
-        Some("void".to_string())
-    } else {
-        let ty: String = tail
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
-        if ty.is_empty() {
-            Some("void".to_string())
-        } else {
-            Some(ty)
-        }
+fn expected_import_path_exists(import_path: &str) -> bool {
+    let root = PathBuf::from("src");
+    let direct_file = root.join(format!("{import_path}.ax"));
+    if direct_file.exists() {
+        return true;
     }
+    let module_dir_file = root.join(import_path).join(
+        import_path
+            .rsplit('/')
+            .next()
+            .unwrap_or(import_path)
+            .to_string()
+            + ".ax",
+    );
+    if module_dir_file.exists() {
+        return true;
+    }
+    let module_dir = root.join(import_path);
+    module_dir.exists()
 }
 
 fn parse_func_name_and_arity(line: &str) -> Option<(String, usize)> {
@@ -46,166 +44,6 @@ fn parse_func_name_and_arity(line: &str) -> Option<(String, usize)> {
         .filter(|p| !p.is_empty())
         .count();
     Some((name, arity))
-}
-
-fn infer_return_expr_type(expr: &str) -> String {
-    let e = expr.trim();
-    if e.is_empty() {
-        "void".to_string()
-    } else if e.starts_with('"') && e.ends_with('"') && e.len() >= 2 {
-        "String".to_string()
-    } else if e.chars().all(|c| c.is_ascii_digit()) {
-        "Int".to_string()
-    } else if e == "true" || e == "false" {
-        "Bool".to_string()
-    } else {
-        "Unknown".to_string()
-    }
-}
-
-fn parse_func_param_types(line: &str) -> Option<(String, Vec<String>)> {
-    let func_part = if let Some(rest) = line.strip_prefix("func ") {
-        rest
-    } else {
-        line.strip_prefix("pub func ")?
-    };
-    let open = func_part.find('(')?;
-    let close = func_part[open + 1..].find(')')? + open + 1;
-    let name: String = func_part[..open]
-        .chars()
-        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-        .collect();
-    if name.is_empty() {
-        return None;
-    }
-    let params = func_part[open + 1..close].trim();
-    if params.is_empty() {
-        return Some((name, vec![]));
-    }
-    let mut out = Vec::new();
-    for p in params.split(',').map(str::trim).filter(|p| !p.is_empty()) {
-        if let Some((_, ty)) = p.split_once(':') {
-            out.push(ty.trim().to_string());
-        } else {
-            out.push("Unknown".to_string());
-        }
-    }
-    Some((name, out))
-}
-
-fn infer_arg_expr_type(expr: &str) -> String {
-    let e = expr.trim();
-    if e.is_empty() {
-        return "Unknown".to_string();
-    }
-    if e.starts_with('"') && e.ends_with('"') && e.len() >= 2 {
-        return "String".to_string();
-    }
-    if e == "true" || e == "false" {
-        return "Bool".to_string();
-    }
-    if e.chars().all(|c| c.is_ascii_digit()) {
-        return "Int".to_string();
-    }
-    "Unknown".to_string()
-}
-
-fn parse_call_name_and_args(line: &str) -> Option<(String, Vec<String>)> {
-    let chars: Vec<char> = line.chars().collect();
-    let mut i = 0usize;
-    while i < chars.len() {
-        if !(chars[i].is_ascii_alphabetic() || chars[i] == '_') {
-            i += 1;
-            continue;
-        }
-        let start = i;
-        let mut end = i;
-        while end < chars.len() && (chars[end].is_ascii_alphanumeric() || chars[end] == '_') {
-            end += 1;
-        }
-        if start > 0 {
-            let mut k = start;
-            while k > 0 && chars[k - 1].is_whitespace() {
-                k -= 1;
-            }
-            if k > 0 && chars[k - 1] == '.' {
-                i = end;
-                continue;
-            }
-        }
-        i = end;
-        let name: String = chars[start..i].iter().collect();
-        if i >= chars.len() || chars[i] != '(' {
-            continue;
-        }
-        if matches!(
-            name.as_str(),
-            "if" | "elif" | "for" | "while" | "func" | "return" | "print" | "assert_eq"
-                | "message_is_error"
-        ) {
-            continue;
-        }
-        let mut args: Vec<String> = Vec::new();
-        let mut current = String::new();
-        let mut depth = 1usize;
-        let mut j = i + 1;
-        let mut in_string = false;
-        while j < chars.len() {
-            let c = chars[j];
-            if in_string {
-                current.push(c);
-                if c == '\\' && j + 1 < chars.len() {
-                    j += 1;
-                    current.push(chars[j]);
-                    j += 1;
-                    continue;
-                }
-                if c == '"' {
-                    in_string = false;
-                }
-                j += 1;
-                continue;
-            }
-            if c == '"' {
-                in_string = true;
-                current.push(c);
-                j += 1;
-                continue;
-            }
-            if c == '(' {
-                depth += 1;
-                current.push(c);
-                j += 1;
-                continue;
-            }
-            if c == ')' {
-                depth -= 1;
-                if depth == 0 {
-                    let trimmed = current.trim();
-                    if !trimmed.is_empty() {
-                        args.push(trimmed.to_string());
-                    }
-                    return Some((name, args));
-                }
-                current.push(c);
-                j += 1;
-                continue;
-            }
-            if c == ',' && depth == 1 {
-                let trimmed = current.trim();
-                if !trimmed.is_empty() {
-                    args.push(trimmed.to_string());
-                }
-                current.clear();
-                j += 1;
-                continue;
-            }
-            current.push(c);
-            j += 1;
-        }
-        break;
-    }
-    None
 }
 
 fn parse_call_name_and_arity(line: &str) -> Option<(String, usize)> {
@@ -371,50 +209,15 @@ fn parse_method_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     None
 }
 
-fn expected_import_path_exists(import_path: &str) -> bool {
-    let root = PathBuf::from("src");
-    let direct_file = root.join(format!("{import_path}.ax"));
-    if direct_file.exists() {
-        return true;
+#[axon_export]
+fn run_semantic_check(source: &str) -> String {
+    if source.trim().is_empty() {
+        return "ok:semantic-snippet:empty".to_string();
     }
-    let module_dir_file = root.join(import_path).join(
-        import_path
-            .rsplit('/')
-            .next()
-            .unwrap_or(import_path)
-            .to_string()
-            + ".ax",
-    );
-    if module_dir_file.exists() {
-        return true;
-    }
-    let module_dir = root.join(import_path);
-    module_dir.exists()
-}
-
-fn check_file_semantics(path: &Path) -> Result<(), String> {
-    let src = std::fs::read_to_string(path)
-        .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
-    let mut seen_funcs: HashSet<String> = HashSet::new();
-    let mut declared_return: HashMap<String, String> = HashMap::new();
-    let mut declared_params: HashMap<String, Vec<String>> = HashMap::new();
-    let mut active_fn = String::new();
-    for line in src.lines() {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut func_arity: HashMap<String, usize> = HashMap::new();
+    for line in source.lines() {
         let trimmed = line.trim();
-        if let Some(import_part) = trimmed.strip_prefix("import ") {
-            let target = import_part
-                .split_whitespace()
-                .next()
-                .unwrap_or_default()
-                .trim_matches('{')
-                .trim_matches('}');
-            if !target.is_empty() && !expected_import_path_exists(target) {
-                return Err(format!(
-                    "error: unresolved import '{target}' in {}",
-                    path.display()
-                ));
-            }
-        }
         if let Some(rest) = trimmed
             .strip_prefix("func ")
             .or_else(|| trimmed.strip_prefix("pub func "))
@@ -424,76 +227,46 @@ fn check_file_semantics(path: &Path) -> Result<(), String> {
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                 .collect();
             if name.is_empty() {
-                return Err(format!(
-                    "error: malformed function declaration in {}",
-                    path.display()
-                ));
+                return "error: malformed function declaration in snippet".to_string();
             }
-            if !seen_funcs.insert(name.clone()) {
-                return Err(format!(
-                    "error: duplicate function '{name}' in {}",
-                    path.display()
-                ));
+            if !seen.insert(name.clone()) {
+                return format!("error: duplicate function '{name}' in snippet");
             }
-            let declared =
-                parse_declared_return_type(trimmed).unwrap_or_else(|| "void".to_string());
-            declared_return.insert(name.clone(), declared);
-            if let Some((fname, params)) = parse_func_param_types(trimmed) {
-                declared_params.insert(fname, params);
+            if let Some((fname, arity)) = parse_func_name_and_arity(trimmed) {
+                func_arity.insert(fname, arity);
             }
-            active_fn = name;
             continue;
         }
-        if let Some((callee, args)) = parse_call_name_and_args(trimmed) {
-            if let Some(expected) = declared_params.get(&callee) {
-                for (idx, arg) in args.iter().enumerate() {
-                    if idx >= expected.len() {
-                        break;
-                    }
-                    let expected_ty = expected[idx].as_str();
-                    let got_ty = infer_arg_expr_type(arg);
-                    if expected_ty != "Unknown" && got_ty != "Unknown" && expected_ty != got_ty {
-                        return Err(format!(
-                            "error: argument type mismatch calling '{callee}' (arg {} expected {expected_ty}, got {got_ty}) in {}",
-                            idx + 1,
-                            path.display()
-                        ));
-                    }
+        if let Some((callee, got_arity)) = parse_call_name_and_arity(trimmed) {
+            if let Some(expected_arity) = func_arity.get(&callee) {
+                if *expected_arity != got_arity {
+                    return format!(
+                        "error: arity mismatch calling '{callee}' (expected {}, got {got_arity}) in snippet",
+                        expected_arity
+                    );
                 }
+            } else {
+                return format!("error: unresolved symbol '{callee}' in snippet");
             }
         }
-        if let Some(expr) = trimmed.strip_prefix("return ") {
-            if !active_fn.is_empty() {
-                let expected = declared_return
-                    .get(&active_fn)
-                    .cloned()
-                    .unwrap_or_else(|| "void".to_string());
-                let got = infer_return_expr_type(expr);
-                if expected == "Int" && got != "Int" && got != "Unknown" {
-                    return Err(format!(
-                        "error: return type mismatch in function '{}' (expected Int, got {got}) in {}",
-                        active_fn,
-                        path.display()
-                    ));
-                }
-                if expected == "String" && got != "String" && got != "Unknown" {
-                    return Err(format!(
-                        "error: return type mismatch in function '{}' (expected String, got {got}) in {}",
-                        active_fn,
-                        path.display()
-                    ));
-                }
-                if expected == "Bool" && got != "Bool" && got != "Unknown" {
-                    return Err(format!(
-                        "error: return type mismatch in function '{}' (expected Bool, got {got}) in {}",
-                        active_fn,
-                        path.display()
-                    ));
+        if let Some((method, got_arity)) = parse_method_call_name_and_arity(trimmed) {
+            if method == "len" {
+                let expected_arity = got_arity + 1;
+                let string_ok = func_arity
+                    .get("string_len")
+                    .map(|a| *a == expected_arity)
+                    .unwrap_or(false);
+                let array_ok = func_arity
+                    .get("array_len")
+                    .map(|a| *a == expected_arity)
+                    .unwrap_or(false);
+                if !string_ok && !array_ok {
+                    return format!("error: unresolved method '{method}' in snippet");
                 }
             }
         }
     }
-    Ok(())
+    "ok:semantic-snippet".to_string()
 }
 
 fn collect_project_function_signatures(
@@ -621,9 +394,6 @@ fn verify_project_calls(
         is_pub: bool,
     }
 
-    /// Module graphs are rooted at `src/`. Normalize keys to `compiler/...`
-    /// so `./src`, `src`, and `././src` traversal all land in one bucket — required
-    /// for same-module `.ax` + sidecar `.rs` symbol registration.
     fn module_key_for_file(root: &Path, file: &Path) -> String {
         let parent = file.parent().unwrap_or(root);
         fn key_after_src(dir: &Path) -> Option<String> {
@@ -639,7 +409,6 @@ fn verify_project_calls(
             }
         }
 
-        // Prefer deterministic `src`/rel path (handles mixed `./` prefixes).
         if let Some(key) = key_after_src(parent) {
             return key;
         }
@@ -938,86 +707,6 @@ fn verify_project_calls(
     walk(root, sigs, &module_symbols)
 }
 
-fn walk_and_check(root: &Path) -> Result<usize, String> {
-    let mut checked = 0usize;
-    let entries = std::fs::read_dir(root)
-        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
-    for entry in entries {
-        let path = entry
-            .map_err(|e| format!("error: bad dir entry: {e}"))?
-            .path();
-        if path.is_dir() {
-            checked += walk_and_check(&path)?;
-            continue;
-        }
-        if is_project_ax_source(&path) {
-            check_file_semantics(&path)?;
-            checked += 1;
-        }
-    }
-    Ok(checked)
-}
-
-#[axon_export]
-fn run_semantic_check(source: &str) -> String {
-    if source.trim().is_empty() {
-        return "ok:semantic-snippet:empty".to_string();
-    }
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut func_arity: HashMap<String, usize> = HashMap::new();
-    for line in source.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed
-            .strip_prefix("func ")
-            .or_else(|| trimmed.strip_prefix("pub func "))
-        {
-            let name: String = rest
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect();
-            if name.is_empty() {
-                return "error: malformed function declaration in snippet".to_string();
-            }
-            if !seen.insert(name.clone()) {
-                return format!("error: duplicate function '{name}' in snippet");
-            }
-            if let Some((fname, arity)) = parse_func_name_and_arity(trimmed) {
-                func_arity.insert(fname, arity);
-            }
-            continue;
-        }
-        if let Some((callee, got_arity)) = parse_call_name_and_arity(trimmed) {
-            if let Some(expected_arity) = func_arity.get(&callee) {
-                if *expected_arity != got_arity {
-                    return format!(
-                        "error: arity mismatch calling '{callee}' (expected {}, got {got_arity}) in snippet",
-                        expected_arity
-                    );
-                }
-            } else {
-                return format!("error: unresolved symbol '{callee}' in snippet");
-            }
-        }
-        if let Some((method, got_arity)) = parse_method_call_name_and_arity(trimmed) {
-            if method == "len" {
-                let expected_arity = got_arity + 1;
-                let string_ok = func_arity
-                    .get("string_len")
-                    .map(|a| *a == expected_arity)
-                    .unwrap_or(false);
-                let array_ok = func_arity
-                    .get("array_len")
-                    .map(|a| *a == expected_arity)
-                    .unwrap_or(false);
-                if !string_ok && !array_ok {
-                    return format!("error: unresolved method '{method}' in snippet");
-                }
-            }
-        }
-    }
-    "ok:semantic-snippet".to_string()
-}
-
 fn semantic_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
@@ -1036,6 +725,30 @@ fn semantic_check_message(root: &str) -> String {
         }
         Err(err) => err,
     }
+}
+
+fn walk_and_check(root: &Path) -> Result<usize, String> {
+    let mut checked = 0usize;
+    let entries = std::fs::read_dir(root)
+        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|e| format!("error: bad dir entry: {e}"))?
+            .path();
+        if path.is_dir() {
+            checked += walk_and_check(&path)?;
+            continue;
+        }
+        if is_project_ax_source(&path) {
+            checked += 1;
+        }
+    }
+    Ok(checked)
+}
+
+#[axon_export]
+fn axon_import_path_exists(path: &str) -> bool {
+    expected_import_path_exists(path)
 }
 
 #[axon_pub_export]

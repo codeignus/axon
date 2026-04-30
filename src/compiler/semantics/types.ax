@@ -1,14 +1,222 @@
 import
     compiler/diagnostics/diagnostics { stage_should_abort }
+    compiler/complex_types/string { string_len }
 
-// Type checks reuse semantic snippet validation for now.
-// The split shape keeps a stable API for future typed IR rules.
 pub func check_types(source: String) String
-    return run_semantic_check(source)
+    return axon_semantic_check(source)
 
 pub func check_type_compatibility(left: String, right: String) String
-    // Evaluate left first so we can return the earliest deterministic failure.
-    left_check := run_semantic_check(left)
+    left_check := axon_semantic_check(left)
     if stage_should_abort(left_check):
         return left_check
-    return run_semantic_check(right)
+    return axon_semantic_check(right)
+
+func is_numeric_type(ty: String) bool
+    if ty == "i8": return true
+    if ty == "i16": return true
+    if ty == "i32": return true
+    if ty == "i64": return true
+    if ty == "u8": return true
+    if ty == "u16": return true
+    if ty == "u32": return true
+    if ty == "u64": return true
+    if ty == "f32": return true
+    if ty == "f64": return true
+    if ty == "Int": return true
+    return false
+
+func is_integer_type(ty: String) bool
+    if ty == "i8": return true
+    if ty == "i16": return true
+    if ty == "i32": return true
+    if ty == "i64": return true
+    if ty == "u8": return true
+    if ty == "u16": return true
+    if ty == "u32": return true
+    if ty == "u64": return true
+    if ty == "Int": return true
+    return false
+
+func is_float_type(ty: String) bool
+    if ty == "f32": return true
+    if ty == "f64": return true
+    return false
+
+func numeric_rank(ty: String) i64
+    if ty == "i8": return 1
+    if ty == "u8": return 2
+    if ty == "i16": return 3
+    if ty == "u16": return 4
+    if ty == "i32": return 5
+    if ty == "u32": return 6
+    if ty == "i64": return 7
+    if ty == "u64": return 8
+    if ty == "Int": return 5
+    if ty == "f32": return 9
+    if ty == "f64": return 10
+    return 0
+
+func wider_type(t1: String, t2: String) String
+    r1 := numeric_rank(t1)
+    r2 := numeric_rank(t2)
+    if r1 >= r2:
+        return t1
+    return t2
+
+pub func type_infer_literal(text: String) String
+    t := axon_string_trim(text)
+    if string_len(t) == 0:
+        return "void"
+    if axon_string_starts_with(t, "\""):
+        return "String"
+    if t == "true" or t == "false":
+        return "bool"
+    if t == "nil":
+        return "void"
+    return "i32"
+
+pub func type_infer_binary_op(op: String, left_type: String, right_type: String) String
+    if left_type == "Unknown" or right_type == "Unknown":
+        return "Unknown"
+    if op == "+":
+        if left_type == "String" or right_type == "String":
+            return "String"
+    if op == "+" or op == "-" or op == "*" or op == "/" or op == "%":
+        if is_numeric_type(left_type) and is_numeric_type(right_type):
+            return wider_type(left_type, right_type)
+        return "error:type:incompatible-operand-types"
+    if op == "==" or op == "!=":
+        if type_compatible(left_type, right_type):
+            return "bool"
+        return "error:type:incomparable-types"
+    if op == "<" or op == ">" or op == "<=" or op == ">=":
+        if is_numeric_type(left_type) and is_numeric_type(right_type):
+            return "bool"
+        return "error:type:non-orderable-types"
+    if op == "&&" or op == "||":
+        if left_type == "bool" and right_type == "bool":
+            return "bool"
+        return "error:type:non-boolean-logical-operand"
+    return "Unknown"
+
+pub func type_compatible(expected: String, actual: String) bool
+    if expected == actual:
+        return true
+    if expected == "void" or actual == "void":
+        return true
+    if expected == "Unknown" or actual == "Unknown":
+        return true
+    if expected == "i32" and actual == "i64":
+        return true
+    if expected == "i8" and actual == "i32":
+        return true
+    if expected == "i8" and actual == "i64":
+        return true
+    if expected == "i16" and actual == "i32":
+        return true
+    if expected == "i16" and actual == "i64":
+        return true
+    if expected == "u8" and actual == "u16":
+        return true
+    if expected == "u8" and actual == "u32":
+        return true
+    if expected == "u8" and actual == "u64":
+        return true
+    if expected == "u16" and actual == "u32":
+        return true
+    if expected == "u16" and actual == "u64":
+        return true
+    if expected == "u32" and actual == "u64":
+        return true
+    if expected == "Int" and is_integer_type(actual):
+        return true
+    if is_integer_type(expected) and actual == "Int":
+        return true
+    if expected == "f32" and actual == "f64":
+        return true
+    return false
+
+pub func types_unify(t1: String, t2: String) String
+    if t1 == "Unknown" or t2 == "Unknown":
+        return "Unknown"
+    if t1 == t2:
+        return t1
+    if is_numeric_type(t1) and is_numeric_type(t2):
+        return wider_type(t1, t2)
+    if type_compatible(t1, t2):
+        return t1
+    return "error:type:unification-failure"
+
+pub func type_check_return(declared: String, actual: String) String
+    if type_compatible(declared, actual):
+        return "ok"
+    return "error:type:return-mismatch:expected " + declared + ", got " + actual
+
+func find_pipe_from(s: String, start: i64) i64
+    mut i: i64 = start
+    while i < string_len(s):
+        if axon_string_char_at(s, i) == "|":
+            return i
+        i = i + 1
+    return string_len(s)
+
+func extract_type_from_env(env: String, name: String) String
+    prefix := "|" + name + ":"
+    prefix_len := string_len(prefix)
+    mut i: i64 = 0
+    while i < string_len(env):
+        rest := axon_string_sub(env, i, string_len(env) - i)
+        if axon_string_starts_with(rest, prefix):
+            type_start := i + prefix_len
+            pipe_pos := find_pipe_from(env, type_start)
+            length := pipe_pos - type_start
+            return axon_string_sub(env, type_start, length)
+        i = i + 1
+    return ""
+
+pub func lookup_type(name: String, env: String) String
+    result := extract_type_from_env(env, name)
+    if string_len(result) == 0:
+        return "Unknown"
+    return result
+
+pub func add_binding(env: String, name: String, ty: String) String
+    return env + name + ":" + ty + "|"
+
+func find_comma_from(s: String, start: i64) i64
+    mut i: i64 = start
+    while i < string_len(s):
+        if axon_string_char_at(s, i) == ",":
+            return i
+        i = i + 1
+    return string_len(s)
+
+func extract_nth_entry(s: String, idx: i64) String
+    mut current: i64 = 0
+    mut start: i64 = 0
+    mut i: i64 = 0
+    while i <= string_len(s):
+        at_end := i == string_len(s)
+        is_sep := false
+        if at_end == false:
+            is_sep = axon_string_char_at(s, i) == ","
+        if at_end or is_sep:
+            if current == idx:
+                return axon_string_sub(s, start, i - start)
+            current = current + 1
+            start = i + 1
+        i = i + 1
+    return ""
+
+pub func type_check_call(callee_return: String, arg_types: String, param_types: String) String
+    mut idx: i64 = 0
+    while true:
+        a := extract_nth_entry(arg_types, idx)
+        p := extract_nth_entry(param_types, idx)
+        if string_len(a) == 0 and string_len(p) == 0:
+            return callee_return
+        if string_len(a) > 0 and string_len(p) > 0:
+            if type_compatible(p, a) == false:
+                return "error:type:arg-mismatch:arg " + arity_char(idx) + " expected " + p + ", got " + a
+        idx = idx + 1
+    return callee_return

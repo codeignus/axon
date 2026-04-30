@@ -2,6 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+/// Parses `build.ax` looking for a `main:` directive to determine the project
+/// entry point. Returns `src/main.ax` if no directive is found.
+/// This is config-file reading, not compiler logic.
 fn project_entry_main_path() -> PathBuf {
     let default_main = PathBuf::from("src/main.ax");
     let Ok(build_ax) = std::fs::read_to_string("build.ax") else {
@@ -26,6 +29,7 @@ fn project_entry_main_path() -> PathBuf {
     default_main
 }
 
+/// Resolves the parent directory of the project entry file.
 fn project_entry_root_path() -> PathBuf {
     let main = project_entry_main_path();
     let resolved = if main.is_absolute() {
@@ -39,6 +43,7 @@ fn project_entry_root_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// Returns true if `path` is a `.ax` file but NOT a `.test.ax` test file.
 fn is_project_ax_source(path: &Path) -> bool {
     if path.extension().and_then(|e| e.to_str()) != Some("ax") {
         return false;
@@ -55,6 +60,7 @@ fn normalize_root(path: &str) -> PathBuf {
     }
 }
 
+/// Recursively walks `root`, collecting non-test `.ax` file paths into `out`.
 fn walk_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
     let entries = std::fs::read_dir(root)
         .map_err(|e| format!("error: discover: cannot read {}: {e}", root.display()))?;
@@ -72,6 +78,7 @@ fn walk_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
+/// Recursively walks `root`, collecting ALL `.ax` file paths (including tests).
 fn collect_all_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
     let entries = std::fs::read_dir(root)
         .map_err(|e| format!("error: ir: cannot read {}: {e}", root.display()))?;
@@ -90,16 +97,22 @@ fn collect_all_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String
     Ok(())
 }
 
+/// FFI: Returns the directory containing the project entry file.
+/// Axon callers use this to locate the source root.
 #[axon_export]
 fn project_entry_root() -> String {
     project_entry_root_path().to_string_lossy().to_string()
 }
 
+/// FFI: Returns the default entry point path (`./src/main.ax`).
 #[axon_export]
 fn discover_entry() -> String {
     "./src/main.ax".to_string()
 }
 
+/// FFI: Lists all non-test `.ax` files under `root`.
+/// Returns newline-separated file paths, sorted. On error returns a
+/// string starting with `error:`.
 #[axon_export]
 fn list_ax_files(root: &str) -> String {
     let root_path = normalize_root(root);
@@ -111,6 +124,18 @@ fn list_ax_files(root: &str) -> String {
     files.join("\n")
 }
 
+/// FFI: Concatenates two strings. Used by Axon where `+` on strings
+/// is not yet available.
+#[axon_export]
+fn string_concat(a: &str, b: &str) -> String {
+    let mut result = String::with_capacity(a.len() + b.len());
+    result.push_str(a);
+    result.push_str(b);
+    result
+}
+
+/// FFI: Reads a source file. On success returns file contents;
+/// on failure returns a string starting with `error:`.
 #[axon_export]
 fn read_source_file(path: &str) -> String {
     match std::fs::read_to_string(path) {
@@ -119,6 +144,8 @@ fn read_source_file(path: &str) -> String {
     }
 }
 
+/// FFI: Returns the character at byte-offset `index` in `s`.
+/// Returns empty string if out of bounds.
 #[axon_export]
 fn string_char_at(s: &str, index: i64) -> String {
     let bytes = s.as_bytes();
@@ -135,6 +162,7 @@ fn string_char_at(s: &str, index: i64) -> String {
     }
 }
 
+/// FFI: Returns the byte value at `index` in `s`, or -1 if out of bounds.
 #[axon_export]
 fn string_byte_at(s: &str, index: i64) -> i64 {
     let bytes = s.as_bytes();
@@ -146,6 +174,8 @@ fn string_byte_at(s: &str, index: i64) -> i64 {
     }
 }
 
+/// FFI: Converts a Unicode code point (i64) to a single-char String.
+/// Returns empty string for invalid code points.
 #[axon_export]
 fn string_from_char(code: i64) -> String {
     if let Some(ch) = char::from_u32(code as u32) {
@@ -155,21 +185,26 @@ fn string_from_char(code: i64) -> String {
     }
 }
 
+/// FFI: Returns true if `s` starts with `prefix`.
 #[axon_export]
 fn string_starts_with(s: &str, prefix: &str) -> bool {
     s.starts_with(prefix)
 }
 
+/// FFI: Returns true if `s` ends with `suffix`.
 #[axon_export]
 fn string_ends_with(s: &str, suffix: &str) -> bool {
     s.ends_with(suffix)
 }
 
+/// FFI: Returns true if `haystack` contains `needle`.
 #[axon_export]
 fn string_contains(haystack: &str, needle: &str) -> bool {
     haystack.contains(needle)
 }
 
+/// FFI: Returns a substring of `s` starting at byte-offset `start`
+/// with byte-length `len`. Returns empty string if start is out of bounds.
 #[axon_export]
 fn string_sub(s: &str, start: i64, len: i64) -> String {
     let start = start as usize;
@@ -181,6 +216,7 @@ fn string_sub(s: &str, start: i64, len: i64) -> String {
     s[start..end].to_string()
 }
 
+/// FFI: Splits `haystack` by `needle`, joining parts with `\x1f` (unit separator).
 #[axon_export]
 fn string_split(haystack: &str, needle: &str) -> String {
     let parts: Vec<&str> = haystack.split(needle).collect();
@@ -194,26 +230,31 @@ fn string_split(haystack: &str, needle: &str) -> String {
     out
 }
 
+/// FFI: Counts non-overlapping occurrences of `needle` in `haystack`.
 #[axon_export]
 fn string_count(haystack: &str, needle: &str) -> i64 {
     haystack.matches(needle).count() as i64
 }
 
+/// FFI: Returns `s` with leading/trailing whitespace removed.
 #[axon_export]
 fn string_trim(s: &str) -> String {
     s.trim().to_string()
 }
 
+/// FFI: Returns true if strings `a` and `b` are equal.
 #[axon_export]
 fn string_eq(a: &str, b: &str) -> bool {
     a == b
 }
 
+/// FFI: Returns true if the filesystem path exists.
 #[axon_export]
 fn path_exists(path: &str) -> bool {
     std::path::Path::new(path).exists()
 }
 
+/// FFI: Returns true if the filesystem path is a directory.
 #[axon_export]
 fn path_is_dir(path: &str) -> bool {
     std::path::Path::new(path).is_dir()

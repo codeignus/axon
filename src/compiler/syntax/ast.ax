@@ -1,3 +1,5 @@
+// --- Declaration node kinds ---
+
 pub func NODE_FUNC_DECL() String
     return "func_decl"
 
@@ -21,6 +23,11 @@ pub func NODE_TYPE_ALIAS() String
 
 pub func NODE_TEST_DECL() String
     return "test_decl"
+
+pub func NODE_METHOD_DECL() String
+    return "method_decl"
+
+// --- Expression node kinds ---
 
 pub func NODE_CALL_EXPR() String
     return "call_expr"
@@ -52,17 +59,70 @@ pub func NODE_CHAR_EXPR() String
 pub func NODE_NIL_EXPR() String
     return "nil_expr"
 
+pub func NODE_MEMBER_EXPR() String
+    return "member_expr"
+
+pub func NODE_INDEX_EXPR() String
+    return "index_expr"
+
+pub func NODE_CONSTRUCTOR_EXPR() String
+    return "constructor_expr"
+
+pub func NODE_FSTRING_EXPR() String
+    return "fstring_expr"
+
+pub func NODE_TUPLE_EXPR() String
+    return "tuple_expr"
+
+pub func NODE_LIST_EXPR() String
+    return "list_expr"
+
+pub func NODE_PAREN_EXPR() String
+    return "paren_expr"
+
+pub func NODE_TRY_EXPR() String
+    return "try_expr"
+
+pub func NODE_CATCH_EXPR() String
+    return "catch_expr"
+
+pub func NODE_AWAIT_EXPR() String
+    return "await_expr"
+
+pub func NODE_OR_ELSE_EXPR() String
+    return "or_else_expr"
+
+pub func NODE_OR_DEFAULT_EXPR() String
+    return "or_default_expr"
+
+pub func NODE_REF_EXPR() String
+    return "ref_expr"
+
+pub func NODE_DEREF_EXPR() String
+    return "deref_expr"
+
+// --- Statement node kinds ---
+
 pub func NODE_BLOCK() String
     return "block"
 
+pub func NODE_BLOCK_EXPR() String
+    return "block_expr"
+
 pub func NODE_BINDING_STMT() String
     return "binding_stmt"
+
+pub func NODE_MUT_STMT() String
+    return "mut_stmt"
 
 pub func NODE_RETURN_STMT() String
     return "return_stmt"
 
 pub func NODE_IF_STMT() String
     return "if_stmt"
+
+pub func NODE_ELIF_BRANCH() String
+    return "elif_branch"
 
 pub func NODE_FOR_STMT() String
     return "for_stmt"
@@ -73,5 +133,113 @@ pub func NODE_WHILE_STMT() String
 pub func NODE_MATCH_STMT() String
     return "match_stmt"
 
+pub func NODE_MATCH_ARM() String
+    return "match_arm"
+
+pub func NODE_EXPR_STMT() String
+    return "expr_stmt"
+
+pub func NODE_ASSIGN_STMT() String
+    return "assign_stmt"
+
+pub func NODE_BREAK_STMT() String
+    return "break_stmt"
+
+pub func NODE_CONTINUE_STMT() String
+    return "continue_stmt"
+
+pub func NODE_DEFER_STMT() String
+    return "defer_stmt"
+
+pub func NODE_ERRDEFER_STMT() String
+    return "errdefer_stmt"
+
+// --- Type node kinds ---
+
+pub func NODE_NAMED_TYPE() String
+    return "named_type"
+
+pub func NODE_GENERIC_TYPE() String
+    return "generic_type"
+
+pub func NODE_FUNC_TYPE() String
+    return "func_type"
+
+pub func NODE_TUPLE_TYPE() String
+    return "tuple_type"
+
+pub func NODE_ARRAY_TYPE() String
+    return "array_type"
+
+pub func NODE_OPTIONAL_TYPE() String
+    return "optional_type"
+
+pub func NODE_REF_TYPE() String
+    return "ref_type"
+
+pub func NODE_FALLIBLE_TYPE() String
+    return "fallible_type"
+
+// --- Pattern node kinds ---
+
+pub func NODE_BINDING_PATTERN() String
+    return "binding_pattern"
+
+pub func NODE_CONSTRUCTOR_PATTERN() String
+    return "constructor_pattern"
+
+pub func NODE_TUPLE_PATTERN() String
+    return "tuple_pattern"
+
+pub func NODE_WILDCARD_PATTERN() String
+    return "wildcard_pattern"
+
+pub func NODE_LITERAL_PATTERN() String
+    return "literal_pattern"
+
+// --- Legacy compat ---
+
 pub func node_kind_name(kind: String) String
     return kind
+
+// --- Node encoding helpers ---
+// Nodes are encoded as "kind|data" strings.
+// Children within data are separated by ";".
+
+func kind_from_node(n: String) String
+    if n == "":
+        return ""
+    c := axon_string_char_at(n, 0)
+    if c == "|":
+        return ""
+    return c + kind_from_node(axon_string_sub(n, 1, 9999))
+
+func data_from_node(n: String) String
+    if n == "":
+        return ""
+    c := axon_string_char_at(n, 0)
+    if c == "|":
+        return axon_string_sub(n, 1, 9999)
+    return data_from_node(axon_string_sub(n, 1, 9999))
+
+pub func node_make(kind: String, data: String) String
+    return kind + "|" + data
+
+pub func node_kind(n: String) String
+    if axon_string_contains(n, "|"):
+        return kind_from_node(n)
+    return n
+
+pub func node_data(n: String) String
+    if axon_string_contains(n, "|"):
+        return data_from_node(n)
+    return ""
+
+pub func node_with_kind(n: String, kind: String) String
+    return node_make(kind, node_data(n))
+
+pub func node_append_child(parent: String, child: String) String
+    data := node_data(parent)
+    if data == "":
+        return node_make(node_kind(parent), child)
+    return node_make(node_kind(parent), data + ";" + child)

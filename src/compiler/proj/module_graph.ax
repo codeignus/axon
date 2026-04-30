@@ -1,2 +1,49 @@
 pub func list_compiler_modules() String
     return "compiler/entry,compiler/pipeline_check,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/complex_types/string,compiler/complex_types/array,compiler/ir/ir,compiler/ir/lower,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge"
+
+pub func build_module_graph(root: String) String
+    files := list_ax_files(string_concat(root, "/src"))
+    if axon_string_starts_with(files, "error:"):
+        return files
+    total := axon_string_count(files, "\n") + 1
+    return extract_module_paths(files, total, 0, "")
+
+func extract_module_paths(files: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_graph_line(files, idx))
+    if string_ends_with(line, ".test.ax"):
+        return extract_module_paths(files, total, idx + 1, acc)
+    mod_path := strip_src_prefix_and_ext(line)
+    if axon_string_count(mod_path, "") == 0:
+        return extract_module_paths(files, total, idx + 1, acc)
+    if axon_string_count(acc, "") == 0:
+        return extract_module_paths(files, total, idx + 1, mod_path)
+    return extract_module_paths(files, total, idx + 1, string_concat(string_concat(acc, ","), mod_path))
+
+func get_graph_line(s: String, idx: i64) String
+    if idx == 0:
+        nl := find_graph_nl(s, 0)
+        if nl < 0:
+            return s
+        return axon_string_sub(s, 0, nl)
+    nl := find_graph_nl(s, 0)
+    if nl < 0:
+        return ""
+    rest := axon_string_sub(s, nl + 1, axon_string_count(s, "") - nl - 1)
+    return get_graph_line(rest, idx - 1)
+
+func find_graph_nl(s: String, pos: i64) i64
+    if pos >= axon_string_count(s, ""):
+        return -1
+    if axon_string_char_at(s, pos) == "\n":
+        return pos
+    return find_graph_nl(s, pos + 1)
+
+func strip_src_prefix_and_ext(path: String) String
+    no_src := path
+    if axon_string_starts_with(path, "src/"):
+        no_src = axon_string_sub(path, 4, axon_string_count(path, "") - 4)
+    if string_ends_with(no_src, ".ax"):
+        return axon_string_sub(no_src, 0, axon_string_count(no_src, "") - 3)
+    return no_src

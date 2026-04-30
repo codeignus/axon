@@ -1,6 +1,11 @@
-// Semantic check wrappers keep callsites stable while implementation evolves.
 pub func run_semantic_check_for_source(source: String) String
-    return run_semantic_check(source)
+    return axon_semantic_check(source)
 
 pub func run_semantic_check_for_project(path: String) String
     return run_semantic_project_check(path)
+
+pub func check_return_types_axon(source: String) String
+    return axon_semantic_check(source)
+
+pub func collect_symbols_axon(source: String) String
+    return resolve_symbol_arity(source)

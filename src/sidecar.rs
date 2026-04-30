@@ -1,8 +1,13 @@
+/// FFI: Panic handler for the Axon runtime. Causes a Rust panic with the
+/// given message prefixed by `axon-lang:`. Does not return.
 #[axon_export]
 fn axon_fail(msg: &str) -> String {
     panic!("axon-lang: {msg}")
 }
 
+/// Normalizes whitespace in Axon source: trims trailing whitespace per line
+/// and converts leading spaces to tabs (2 spaces = 1 tab).
+/// This is a formatting utility, not compiler logic.
 fn format_axon_source(input: &str) -> String {
     let mut out = String::new();
     for raw_line in input.lines() {
@@ -31,11 +36,15 @@ fn format_axon_source(input: &str) -> String {
     out
 }
 
+/// FFI: Formats an Axon source string in-memory. Used by tests.
+/// Params: `input` — raw source text. Returns the reformatted source.
 #[axon_export]
 fn format_source_for_test(input: &str) -> String {
     format_axon_source(input)
 }
 
+/// FFI: Reads an Axon file, reformats it in-place (whitespace normalization),
+/// and writes it back. Returns the file path on success, panics on I/O error.
 #[axon_export]
 fn format_axon_file(path: &str) -> String {
     let src =

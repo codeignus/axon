@@ -7,6 +7,19 @@ import
     compiler/semantics/check { run_semantic_project_check }
     compiler/semantics/semantics { semantic_stage_failed }
     compiler/ownership { ownership_stage_failed }
+    compiler/proj { check_project_has_manifest, check_project_has_source_dir, check_main_entry_exists, discover_source_files }
+
+pub func validate_project_structure(root: String) String
+    manifest := check_project_has_manifest()
+    if stage_should_abort(manifest):
+        return manifest
+    src_dir := check_project_has_source_dir()
+    if stage_should_abort(src_dir):
+        return src_dir
+    entry := check_main_entry_exists()
+    if stage_should_abort(entry):
+        return entry
+    return "ok"
 
 pub func run_check_for_path(path: String) String
     bridge := bootstrap.check_bridge_readiness()
@@ -18,6 +31,9 @@ pub func run_check_for_path(path: String) String
     link := backend.validate_link_readiness()
     if stage_should_abort(link):
         return diag_error("link", link)
+    struct := validate_project_structure(path)
+    if stage_should_abort(struct):
+        return diag_error("project", struct)
     if lex_stage_failed(path):
         return diag_error("lex", run_lex_check(path))
     if parse_stage_failed(path):

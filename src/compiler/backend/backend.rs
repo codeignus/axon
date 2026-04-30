@@ -1,3 +1,9 @@
+/// FFI: Accepts a lowered IR string (prefixed `ok:lowered:`), builds the
+/// native artifact via the host compiler workspace, and publishes the
+/// resulting binary to `target/build/axon/axon`.
+///
+/// Protocol: returns `"ok"` on success, or `"error: ..."` on failure.
+/// Handles self-overwrite by staging through a temp file + atomic rename.
 #[axon_pub_export]
 fn run_lowered_to_artifact(lowered: &str) -> String {
     if lowered.is_empty() {
@@ -6,8 +12,6 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     if !lowered.starts_with("ok:lowered:") {
         return "error: lowering did not produce expected result".to_string();
     }
-    // Use vendored compiler workspace for self-independence.
-    // Falls back to rust-backed-compiler-for-axon if vendor not present.
     let workspace_root = std::path::Path::new(".");
     let host_root = workspace_root.join("rust-self-compiler-for-axon");
     let host_root = if host_root.join("Cargo.toml").exists() {
@@ -61,8 +65,6 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
         None => return "error: native artifact not found after build".to_string(),
     };
 
-    // Avoid "Text file busy" when overwriting the running executable:
-    // copy to a temp file first, then rename atomically.
     let out_abs = std::fs::canonicalize(out_dir).unwrap_or_else(|_| out_dir.to_path_buf());
     let exe_abs = std::env::current_exe().unwrap_or_default();
     let is_self_overwrite = exe_abs.starts_with(&out_abs);
@@ -112,6 +114,9 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     "ok".to_string()
 }
 
+/// FFI: Executes the previously built `target/build/axon/axon` binary.
+/// Returns `"ok:run"` or `"ok:run:<stdout>"` on success, `"error: ..."` on failure.
+/// If the binary prints usage (compiler CLI), retries with `check` subcommand.
 #[axon_pub_export]
 fn launch_self_built() -> String {
     let target = std::path::Path::new("target/build/axon/axon");
@@ -134,8 +139,6 @@ fn launch_self_built() -> String {
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            // If the built artifact is the compiler binary itself, no-arg launch
-            // prints command usage. Retry with `check` as a health command.
             if stderr.contains("Usage:")
                 && stderr.contains("Commands:")
                 && stderr.contains("check")
@@ -178,8 +181,11 @@ fn launch_self_built() -> String {
     }
 }
 
-/// Run tests via the vendored (or fallback) Rust compiler workspace.
-/// This makes `axon test` self-independent from any external host compiler.
+/// FFI: Runs tests via the vendored (or fallback) Rust compiler workspace.
+/// Makes `axon test` self-independent from any external host compiler.
+///
+/// Params: `target` — optional test target filter (empty string = all).
+/// Returns `"ok:tests:passed"` or test output on success, `"error: ..."` on failure.
 #[axon_pub_export]
 fn run_tests_via_rust_compiler(target: &str) -> String {
     let workspace_root = std::path::Path::new(".");
@@ -235,6 +241,8 @@ fn run_tests_via_rust_compiler(target: &str) -> String {
     }
 }
 
+/// Parses `build.ax` for a `project <name>` declaration.
+/// Returns the project name if found. This is config-file reading, not compiler logic.
 fn parse_project_name_from_build_ax() -> Option<String> {
     let build_ax = std::fs::read_to_string("build.ax").ok()?;
     for line in build_ax.lines() {
@@ -252,6 +260,8 @@ fn parse_project_name_from_build_ax() -> Option<String> {
     None
 }
 
+/// Resolves the path to the native artifact based on the project name
+/// read from `build.ax`. Returns `target/build/<project>/<project>`.
 fn resolve_native_artifact_path() -> Option<std::path::PathBuf> {
     let project = parse_project_name_from_build_ax()?;
     let direct = std::path::PathBuf::from("target/build").join(&project).join(&project);
@@ -259,4 +269,47 @@ fn resolve_native_artifact_path() -> Option<std::path::PathBuf> {
         return Some(direct);
     }
     None
+}
+
+/// FFI: Copies the current `target/build/axon/axon` binary to
+/// `target/build/axon/axon_{suffix}`, preserving executable permissions.
+/// Returns `"ok"` on success or `"error: ..."` on failure.
+#[axon_pub_export]
+fn preserve_suffixed_binary(suffix: &str) -> String {
+    if suffix.is_empty() {
+        return "error: suffix must not be empty".to_string();
+    }
+    let out_dir = std::path::Path::new("target/build/axon");
+    if !out_dir.is_dir() {
+        return format!("error: {} does not exist", out_dir.display());
+    }
+    let src = out_dir.join("axon");
+    if !src.exists() {
+        return format!("error: {} not found, run build first", src.display());
+    }
+    let dst_name = format!("axon_{suffix}");
+    let dst = out_dir.join(&dst_name);
+    match std::fs::copy(&src, &dst) {
+        Ok(_) => {}
+        Err(e) => {
+            return format!(
+                "error: cannot copy {} to {}: {e}",
+                src.display(),
+                dst.display()
+            )
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) =
+            std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o755))
+        {
+            return format!(
+                "error: cannot set executable permissions on {}: {e}",
+                dst.display()
+            );
+        }
+    }
+    format!("ok:preserved:{}", dst.display())
 }
