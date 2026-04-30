@@ -14,7 +14,39 @@ pub func extract_binary_name(manifest: String) String
     return scan_for_prefix_value(manifest, "bin ")
 
 pub func extract_main_entry(manifest: String) String
-    return scan_for_prefix_value(manifest, "main:")
+    raw := scan_for_prefix_value(manifest, "main:")
+    return strip_optional_quotes(raw)
+
+pub func extract_version_field(manifest: String) String
+    raw := scan_for_prefix_value(manifest, "version:")
+    return strip_optional_quotes(raw)
+
+pub func manifest_has_rust_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "rust_deps")
+
+func manifest_line_has_kw(manifest: String, total: i64, idx: i64, kw: String) bool
+    if idx >= total:
+        return false
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if line == kw:
+        return true
+    return manifest_line_has_kw(manifest, total, idx + 1, kw)
+
+func strip_optional_quotes(s: String) String
+    t := axon_string_trim(s)
+    if axon_string_count(t, "") < 2:
+        return t
+    first := axon_string_char_at(t, 0)
+    last_idx := axon_string_count(t, "") - 1
+    last := axon_string_char_at(t, last_idx)
+    if first == "\"" && last == "\"":
+        inner_len := axon_string_count(t, "") - 2
+        return axon_string_sub(t, 1, inner_len)
+    if first == "'" && last == "'":
+        inner_len := axon_string_count(t, "") - 2
+        return axon_string_sub(t, 1, inner_len)
+    return t
 
 func scan_for_prefix_value(manifest: String, prefix: String) String
     total := axon_string_count(manifest, "\n") + 1

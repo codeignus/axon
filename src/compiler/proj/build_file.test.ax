@@ -1,0 +1,24 @@
+import
+    compiler/proj/build_file {
+        extract_project_name,
+        extract_binary_name,
+        extract_main_entry,
+        extract_version_field,
+        manifest_has_rust_deps
+    }
+
+test build_extract_main_strip_double_quotes
+    m := "project x\n    version: \"0.1\"\n\nbin x\n    main: \"./src/main.ax\""
+    assert_eq(extract_main_entry(m), "./src/main.ax")
+
+test build_extract_version_strip_quotes
+    m := "project x\n    version: \"0.2\"\n\nbin x\n    main: ./src/main.ax"
+    assert_eq(extract_version_field(m), "0.2")
+
+test build_manifest_has_rust_deps
+    m := "project demo\nrust_deps\n    tokio = \"1\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_rust_deps(m), true)
+
+test build_manifest_no_rust_deps
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_rust_deps(m), false)

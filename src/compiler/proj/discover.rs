@@ -107,7 +107,7 @@ fn project_entry_root() -> String {
 /// FFI: Returns the default entry point path (`./src/main.ax`).
 #[axon_export]
 fn discover_entry() -> String {
-    "./src/main.ax".to_string()
+    project_entry_main_path().to_string_lossy().into_owned()
 }
 
 /// FFI: Lists all non-test `.ax` files under `root`.

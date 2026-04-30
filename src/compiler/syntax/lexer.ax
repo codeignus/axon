@@ -511,17 +511,13 @@ pub func validate_tokens(source: String) String
     trimmed := axon_string_trim(source)
     if trimmed == "":
         return "ok:tokens:0"
-    spaces := axon_string_count(trimmed, " ")
-    newlines := axon_string_count(trimmed, "\n")
-    tabs := axon_string_count(trimmed, "\t")
-    count := spaces + newlines + tabs + 1
-    return "ok:tokens:" + i64_to_string(count)
+    stream := lex_all_tokens(source)
+    n := axon_string_count(stream, "\n") + 1
+    return "ok:tokens:" + i64_to_string(n)
 
 pub func token_count_native(source: String) i64
     trimmed := axon_string_trim(source)
     if trimmed == "":
         return 0
-    spaces := axon_string_count(trimmed, " ")
-    newlines := axon_string_count(trimmed, "\n")
-    tabs := axon_string_count(trimmed, "\t")
-    return spaces + newlines + tabs + 1
+    stream := lex_all_tokens(source)
+    return axon_string_count(stream, "\n") + 1

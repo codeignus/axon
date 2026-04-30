@@ -133,10 +133,10 @@ Expected: parity script runs and reports "no parity diff" for the fixtures alrea
 - Test: `src/compiler/syntax/lexer.test.ax` + ported fixtures from reference `lexer/tests.rs`.
 
 **Tasks:**
-- [ ] Port tokenization rules from `lexer/mod.rs` into `lexer.ax`. Use sidecar primitives only for byte/string ops not yet in Axon.
-- [ ] Cover: indentation/dedent stacks, blank/comment lines, newline suppression inside delimiters, `@rust ... @end`, `@go ... @end`, unterminated raw blocks, string escapes, char escapes, f-string starts, numeric underscores, all keywords/operators.
-- [ ] Wire `pipeline_check.ax` to consume Axon-owned tokens; remove Rust token classification from the active path.
-- [ ] LANG-GAP procedure if Axon needs (e.g.) faster string indexing — add primitive in `lexer.rs` named `axon_string_byte_at_safe(...)` and continue.
+- [x] **Lex pass alignment:** `lexer.rs` mirrors `lexer.ax`'s operator/keyword/word splitting and rejects unterminated literals/comments (**active check path uses `lexer.rs`** until Axon FFI can consume `lex_all_tokens`).
+- [x] **`validate_tokens` / `token_count_native`** now count real lexer output via `lex_all_tokens` (`lexer.ax`).
+- [ ] Port **indent/dedent**, raw `@rust`/`@go` blocks, f-strings from `axon-frontend` lexer into **`lexer.ax`** + wire check path to Axon-produced token stream via FFI (`lexer.rs` file walk only).
+- [ ] LANG-GAP primitives as needed (`lexer.rs`).
 
 **Verification:**
 ```bash
@@ -184,7 +184,8 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 - Test: `src/compiler/proj/{loading,targets}.test.ax` + `src/compiler/semantics/project_parity.test.ax`.
 
 **Tasks:**
-- [ ] Port `build.ax` parsing: project name (incl. hyphenated), `bin <name>`, `main`, `deps`, `rust_deps`, `go_deps`, `python_deps`.
+- [x] `build_file.ax`: `main:` / `version:` strip optional quotes; `manifest_has_rust_deps` heuristic; **`discover.rs` `discover_entry`** reads `main:` from `build.ax`; tests in `proj/build_file.test.ax`.
+- [ ] Port remainder: hyphenated naming edge cases, `deps`, full `rust_deps`/go_deps block bodies, parity with loader.
 - [ ] Port module discovery: app files, colocated `*.test.ax`, integration `tests/**/*.ax`, sidecar association, import-path → module-path conversion.
 - [ ] Port check/test target scopes: project, file, module, tree `...`, invalid outside-project path errors.
 - [ ] Keep Rust only for directory listing, canonicalization, file reads, existence checks.
