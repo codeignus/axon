@@ -1,5 +1,5 @@
 import
-    compiler/backend { run_lowered_to_artifact, launch_self_built, run_tests_via_rust_compiler }
+    compiler/backend { run_lowered_to_artifact, launch_self_built, run_compiler_tests_native }
     compiler/diagnostics/diagnostics { diag_error, stage_should_abort }
     compiler/ir { lower_project }
     compiler/pipeline_check { run_check_for_path, run_fmt_target, validate_project_structure }
@@ -39,7 +39,7 @@ pub func run_tests(target: String) String
     pre := run_check_for_path("")
     if stage_should_abort(pre):
         return pre
-    return run_tests_via_rust_compiler(target)
+    return run_compiler_tests_native(target)
 
 pub func run_fmt(target: String) String
     return run_fmt_target(target)

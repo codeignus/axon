@@ -1,0 +1,13 @@
+[package]
+name = "axon-native-build"
+version = "0.1.0"
+edition = "2021"
+description = "Temporary migration driver: links axon-codegen from the reference tree into the Axon repo build path. Remove when compiler logic is fully in .ax + sidecars."
+publish = false
+
+[[bin]]
+name = "axon-native-build"
+path = "src/main.rs"
+
+[dependencies]
+axon-codegen = { path = "../../../../deprecioated-soon-compiler-do-not-rename/crates/axon-codegen" }

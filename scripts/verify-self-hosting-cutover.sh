@@ -12,9 +12,7 @@ MANIFEST="${AXON_BOOTSTRAP_MANIFEST:-}"
 if [[ -z "$MANIFEST" ]]; then
   for c in \
     "$ROOT/bootstrap-compiler/Cargo.toml" \
-    "$ROOT/rust-backed-compiler-for-axon/Cargo.toml" \
-    "$ROOT/../rust-backed-compiler-for-axon/Cargo.toml" \
-    "$ROOT/depreciating-soon-compiler-do-not-rename/Cargo.toml"
+    "$ROOT/deprecioated-soon-compiler-do-not-rename/Cargo.toml"
   do
     if [[ -f "$c" ]]; then
       MANIFEST="$c"

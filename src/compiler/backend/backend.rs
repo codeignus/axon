@@ -1,132 +1,164 @@
-/// FFI: Accepts a lowered IR string (prefixed `ok:lowered:`), builds the
-/// native artifact via the host compiler workspace, and publishes the
-/// resulting binary to `target/build/axon/axon`.
-///
-/// Protocol: returns `"ok"` on success, or `"error: ..."` on failure.
-/// Handles self-overwrite by staging through a temp file + atomic rename.
+/// Sidecar: native codegen driver + artifact publish. Builds the in-tree migration binary
+/// `axon-native-build` (Cargo package under `src/compiler/backend/axon_native_build/`) which links
+/// the legacy `axon-codegen` library via path dependency until equivalent logic lives in `.ax`.
+
+const MIGRATION_CRATE_REL: &str = "src/compiler/backend/axon_native_build/Cargo.toml";
+
+fn workspace_root_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(".")
+}
+
+fn default_migration_binary_path(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("target/debug/axon-native-build")
+}
+
+fn ensure_migration_driver_binary(root: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let override_bin = std::env::var("AXON_NATIVE_BUILD_BIN").unwrap_or_default();
+    if !override_bin.is_empty() {
+        let p = std::path::PathBuf::from(&override_bin);
+        if p.is_file() {
+            return Ok(p);
+        }
+        return Err(format!(
+            "error: AXON_NATIVE_BUILD_BIN set but missing: {}",
+            p.display()
+        ));
+    }
+
+    let candidate = default_migration_binary_path(root);
+    if candidate.is_file() {
+        return Ok(candidate);
+    }
+
+    let manifest_abs = workspace_root_dir().join(MIGRATION_CRATE_REL);
+    if !manifest_abs.is_file() {
+        return Err(format!(
+            "error: migration manifest missing {}; cannot build native driver",
+            manifest_abs.display()
+        ));
+    }
+
+    let manifest_str = manifest_abs
+        .to_str()
+        .ok_or_else(|| "error: manifest path must be UTF-8".to_string())?;
+    let target_dir = root.join("target/native-build-driver");
+    let mut cargo = std::process::Command::new("cargo");
+    cargo.arg("+nightly");
+    cargo.arg("build");
+    cargo.arg("--manifest-path").arg(manifest_str);
+    cargo.arg("-p").arg("axon-native-build");
+    cargo.arg("--quiet");
+    cargo.env("CARGO_TARGET_DIR", &target_dir);
+    for key in [
+        "LLVM_SYS_211_PREFIX",
+        "LLVM_SYS_210_PREFIX",
+        "LIBCLANG_PATH",
+        "LIBCLANG_STATIC_PATH",
+    ] {
+        if let Ok(v) = std::env::var(key) {
+            cargo.env(key, v);
+        }
+    }
+    match cargo.output() {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            return Err(format!(
+                "error: cargo build migration driver failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Err(e) => return Err(format!("error: cannot run cargo for migration driver: {e}")),
+    }
+
+    let built = target_dir.join("debug/axon-native-build");
+    if !built.is_file() {
+        return Err("error: migration driver binary not found after build".to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&built, std::fs::Permissions::from_mode(0o755));
+    }
+
+    Ok(built)
+}
+
 #[axon_pub_export]
 fn run_lowered_to_artifact(lowered: &str) -> String {
     if lowered.is_empty() {
-        return "error: empty IR module".to_string();
+        return "error: empty backend request".to_string();
     }
     if !lowered.starts_with("ok:lowered:") {
-        return "error: lowering did not produce expected result".to_string();
+        return "error: lowering did not produce expected envelope".to_string();
     }
-    let workspace_root = std::path::Path::new(".");
-    let host_root = workspace_root.join("rust-self-compiler-for-axon");
-    let host_root = if host_root.join("Cargo.toml").exists() {
-        host_root
-    } else {
-        workspace_root.join("rust-backed-compiler-for-axon")
+
+    let root = workspace_root_dir();
+    let driver = match ensure_migration_driver_binary(&root) {
+        Ok(p) => p,
+        Err(e) => return e,
     };
-    let host_target = host_root.join("target");
-    let host_bin = host_target.join("debug/axon");
 
-    if !host_bin.exists() {
-        let mut build_cmd = std::process::Command::new("cargo");
-        build_cmd.arg("build").arg("-p").arg("axon");
-        build_cmd.current_dir(&host_root);
-        build_cmd.env("CARGO_TARGET_DIR", &host_target);
-        match build_cmd.output() {
-            Ok(out) if out.status.success() => {}
-            Ok(out) => {
-                return format!(
-                    "error: host compiler build failed: {}",
-                    String::from_utf8_lossy(&out.stderr).trim()
-                )
-            }
-            Err(e) => return format!("error: cannot build host compiler: {e}"),
-        }
-    }
-
-    let mut native_build = std::process::Command::new(&host_bin);
-    native_build.arg("build");
-    native_build.current_dir(workspace_root);
-    native_build.env("CARGO_TARGET_DIR", &host_target);
-    match native_build.output() {
+    let mut cmd = std::process::Command::new(&driver);
+    cmd.arg("build");
+    cmd.current_dir(&root);
+    match cmd.output() {
         Ok(out) if out.status.success() => {}
         Ok(out) => {
-            return format!(
-                "error: native build failed: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            )
-        }
-        Err(e) => return format!("error: cannot run native build: {e}"),
-    }
-
-    let out_dir = std::path::Path::new("target/build/axon");
-    if let Err(e) = std::fs::create_dir_all(out_dir) {
-        return format!("error: cannot create {}: {e}", out_dir.display());
-    }
-    let out_bin = out_dir.join("axon");
-
-    let native_artifact = match resolve_native_artifact_path() {
-        Some(p) => p,
-        None => return "error: native artifact not found after build".to_string(),
-    };
-
-    let out_abs = std::fs::canonicalize(out_dir).unwrap_or_else(|_| out_dir.to_path_buf());
-    let exe_abs = std::env::current_exe().unwrap_or_default();
-    let is_self_overwrite = exe_abs.starts_with(&out_abs);
-
-    if is_self_overwrite {
-        let tmp_name = format!("axon.tmp.{}", std::process::id());
-        let tmp_path = out_dir.join(&tmp_name);
-        if let Err(e) = std::fs::copy(&native_artifact, &tmp_path) {
-            return format!("error: cannot stage artifact {}: {e}", tmp_path.display());
-        }
-        let new_path = out_dir.join("axon.new");
-        if let Err(e) = std::fs::rename(&tmp_path, &new_path) {
-            return format!("error: cannot publish artifact {}: {e}", new_path.display());
-        }
-    } else {
-        if let Err(e) = std::fs::copy(&native_artifact, &out_bin) {
-            return format!(
-                "error: cannot publish artifact {}: {e}",
-                out_bin.display()
-            );
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Err(e) =
-                std::fs::set_permissions(&out_bin, std::fs::Permissions::from_mode(0o755))
-            {
-                return format!(
-                    "error: cannot set executable permissions on {}: {e}",
-                    out_bin.display()
-                );
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let mut combined = stderr;
+            if !stdout.is_empty() {
+                if !combined.is_empty() {
+                    combined.push('\n');
+                }
+                combined.push_str(&stdout);
             }
+            if combined.is_empty() {
+                combined = format!("native build exited with {}", out.status);
+            }
+            return format!("error: native build: {combined}");
         }
+        Err(e) => return format!("error: cannot run migration driver build: {e}"),
     }
 
-    let marker = out_dir.join("build-manifest.txt");
-    let manifest = format!(
-        "artifact\nstage=native-link\nsource-native={}\nout={}\nlowered={}\n",
-        native_artifact.display(),
-        out_bin.display()
-        ,
+    let marker_dir = root.join("target/build/axon");
+    if let Err(e) = std::fs::create_dir_all(&marker_dir) {
+        return format!("error: cannot create {}: {e}", marker_dir.display());
+    }
+    let marker = marker_dir.join("build-manifest.txt");
+    let proj = parse_project_name_from_build_ax().unwrap_or_else(|| "axon".into());
+    let native = root.join("target/build").join(&proj).join(&proj);
+    let manifest_txt = format!(
+        "artifact\nstage=migration-native-build\nmigration-driver={}\nsource-native={}\nproject={}\nlowered-envelope={}\n",
+        driver.display(),
+        native.display(),
+        proj,
         lowered
     );
-    if let Err(e) = std::fs::write(&marker, manifest) {
+    if let Err(e) = std::fs::write(&marker, manifest_txt) {
         return format!("error: cannot write {}: {e}", marker.display());
     }
     "ok".to_string()
 }
 
-/// FFI: Executes the previously built `target/build/axon/axon` binary.
-/// Returns `"ok:run"` or `"ok:run:<stdout>"` on success, `"error: ..."` on failure.
-/// If the binary prints usage (compiler CLI), retries with `check` subcommand.
+/// FFI: Executes `target/build/axon/axon` (compiler install layout expected by CLI).
 #[axon_pub_export]
 fn launch_self_built() -> String {
-    let target = std::path::Path::new("target/build/axon/axon");
+    let build_ax_bin = infer_install_binary_path();
+    let target = if build_ax_bin.is_file() {
+        build_ax_bin
+    } else {
+        std::path::PathBuf::from("target/build/axon/axon")
+    };
+
     if !target.exists() {
         return format!(
             "error: {} not found, run build first",
             target.display()
         );
     }
-    let run = std::process::Command::new(target).output();
+    let run = std::process::Command::new(&target).output();
     match run {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -143,7 +175,7 @@ fn launch_self_built() -> String {
                 && stderr.contains("Commands:")
                 && stderr.contains("check")
             {
-                match std::process::Command::new(target).arg("check").output() {
+                match std::process::Command::new(&target).arg("check").output() {
                     Ok(retry) if retry.status.success() => {
                         let out = String::from_utf8_lossy(&retry.stdout);
                         let text = out.trim();
@@ -181,73 +213,65 @@ fn launch_self_built() -> String {
     }
 }
 
-/// FFI: Runs tests via the vendored (or fallback) Rust compiler workspace.
-/// Makes `axon test` self-independent from any external host compiler.
-///
-/// Params: `target` — optional test target filter (empty string = all).
-/// Returns `"ok:tests:passed"` or test output on success, `"error: ..."` on failure.
 #[axon_pub_export]
-fn run_tests_via_rust_compiler(target: &str) -> String {
-    let workspace_root = std::path::Path::new(".");
-    let host_root = workspace_root.join("rust-self-compiler-for-axon");
-    let host_root = if host_root.join("Cargo.toml").exists() {
-        host_root
-    } else {
-        workspace_root.join("rust-backed-compiler-for-axon")
+fn run_compiler_tests_native(target: &str) -> String {
+    let root = workspace_root_dir();
+    let driver = match ensure_migration_driver_binary(&root) {
+        Ok(p) => p,
+        Err(e) => return e,
     };
-    let host_target = host_root.join("target");
-    let host_bin = host_target.join("debug/axon");
-
-    if !host_bin.exists() {
-        let mut build_cmd = std::process::Command::new("cargo");
-        build_cmd.arg("build").arg("-p").arg("axon");
-        build_cmd.current_dir(&host_root);
-        build_cmd.env("CARGO_TARGET_DIR", &host_target);
-        match build_cmd.output() {
-            Ok(out) if out.status.success() => {}
-            Ok(out) => {
-                return format!(
-                    "error: host compiler build failed: {}",
-                    String::from_utf8_lossy(&out.stderr).trim()
-                )
-            }
-            Err(e) => return format!("error: cannot build host compiler: {e}"),
-        }
-    }
-
-    let mut test_cmd = std::process::Command::new(&host_bin);
-    test_cmd.arg("test");
+    let mut cmd = std::process::Command::new(&driver);
+    cmd.arg("test");
     if !target.is_empty() {
-        test_cmd.arg(target);
+        cmd.arg(target);
     }
-    test_cmd.current_dir(workspace_root);
-    test_cmd.env("CARGO_TARGET_DIR", &host_target);
-    match test_cmd.output() {
+    cmd.current_dir(&root);
+    match cmd.output() {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
             let stderr = String::from_utf8_lossy(&out.stderr);
             if out.status.success() {
                 let text = stdout.trim();
                 if text.is_empty() {
-                    "ok:tests:passed".to_string()
+                    stderr.trim().to_string()
                 } else {
                     text.to_string()
                 }
             } else {
-                format!("error: tests failed: {}", stderr.trim())
+                format!(
+                    "error: tests failed: {}",
+                    if stderr.trim().is_empty() {
+                        stdout.trim()
+                    } else {
+                        stderr.trim()
+                    }
+                )
             }
         }
         Err(e) => format!("error: cannot run tests: {e}"),
     }
 }
 
-/// Parses `build.ax` for a `project <name>` declaration.
-/// Returns the project name if found. This is config-file reading, not compiler logic.
+fn infer_install_binary_path() -> std::path::PathBuf {
+    let nm = infer_bin_target_name_from_build_ax().unwrap_or_else(|| "axon".into());
+    std::path::PathBuf::from("target/build").join(&nm).join(nm)
+}
+
+/// Reads `project <name>` from `build.ax`.
 fn parse_project_name_from_build_ax() -> Option<String> {
     let build_ax = std::fs::read_to_string("build.ax").ok()?;
+    scan_build_ax_named_line(&build_ax, "project ")
+}
+
+fn infer_bin_target_name_from_build_ax() -> Option<String> {
+    let build_ax = std::fs::read_to_string("build.ax").ok()?;
+    scan_build_ax_named_line(&build_ax, "bin ").or_else(|| scan_build_ax_named_line(&build_ax, "project "))
+}
+
+fn scan_build_ax_named_line(build_ax: &str, prefix: &str) -> Option<String> {
     for line in build_ax.lines() {
         let t = line.trim();
-        if let Some(rest) = t.strip_prefix("project ") {
+        if let Some(rest) = t.strip_prefix(prefix) {
             let name: String = rest
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
@@ -260,20 +284,6 @@ fn parse_project_name_from_build_ax() -> Option<String> {
     None
 }
 
-/// Resolves the path to the native artifact based on the project name
-/// read from `build.ax`. Returns `target/build/<project>/<project>`.
-fn resolve_native_artifact_path() -> Option<std::path::PathBuf> {
-    let project = parse_project_name_from_build_ax()?;
-    let direct = std::path::PathBuf::from("target/build").join(&project).join(&project);
-    if direct.exists() {
-        return Some(direct);
-    }
-    None
-}
-
-/// FFI: Copies the current `target/build/axon/axon` binary to
-/// `target/build/axon/axon_{suffix}`, preserving executable permissions.
-/// Returns `"ok"` on success or `"error: ..."` on failure.
 #[axon_pub_export]
 fn preserve_suffixed_binary(suffix: &str) -> String {
     if suffix.is_empty() {

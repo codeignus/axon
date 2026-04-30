@@ -9,43 +9,26 @@ The **axon project** is only what ships the language pipeline:
 
 There is **no `Cargo.toml` at the repo root**. This checkout is **not** a Cargo package.
 
-## Bootstrap compiler (optional, separate subdirectory)
+## Bootstrap + migration (LLVM / reference compiler)
 
-LLVM-backed tooling that compiles Axon sources lives **`only** under **`bootstrap-compiler/`** (its own Cargo workspace). That directory is tooling you run when you need a native `axon` binary; keep it **out** of CI or clone if you insist on “Axon sources only”—or mount it externally and set **`AXON_NATIVE_TOOLCHAIN`**.
+LLVM-backed Axon requires **rustc nightly** (`cargo +nightly`) plus **LLVM 21 development libraries** compatible with **`llvm-sys`/inkwell**. Set **`LLVM_SYS_211_PREFIX`** if `llvm-sys` cannot find LLVM on its own.
 
-First artifact must exist (from any machine that can compile the bootstrap workspace once). Prefer **`axon build`** from repo root once you have **`./target/build/axon/axon`**:
+- **Bootstrap** produces the first `./target/build/axon/axon` binary. Scripts look for **`AXON_BOOTSTRAP_MANIFEST`**, then `bootstrap-compiler/Cargo.toml`, then **`deprecioated-soon-compiler-do-not-rename/Cargo.toml`** on disk (clone the reference checkout next to Axon sources; see `.gitignore` note).
+- **`src/compiler/backend/axon_native_build/`** is a **temporary** Cargo package linking **`axon-codegen`** from that reference checkout as a migration bridge. Prefer building it once (`cargo +nightly build …`) so **`AXON_NATIVE_BUILD_BIN`** can point at `./target/native-build-driver/debug/axon-native-build` and skip rebuilds during `axon build`.
+- **`src/compiler/backend/backend.rs`** invokes that driver for real native `check`/`build`/`test` (**no subprocess to a second `axon` CLI**). Logic is ported from Rust → `.ax` over time until the Cargo bridge can shrink.
 
-```bash
-export AXON_NATIVE_TOOLCHAIN=/path/to/bootstrap-compiler   # Cargo workspace root (can live in /tmp after mv)
-./target/build/axon/axon build
-```
-
-Only use Cargo directly when you still have **no** `axon` binary yet, e.g. **`cargo run --manifest-path …/Cargo.toml -p axon -- build`** one time.
-
-Axon-only verification (no `cargo` in the script):
-
-```bash
-AXON_NATIVE_TOOLCHAIN=/path/to/workspace ./scripts/verify-independent-axon.sh
-```
-
-Self-built artifact (still under Axon outputs):
-
-```
-./target/build/axon/axon check ""
-./target/build/axon/axon build
-```
-
-## Native link resolution (`src/compiler/backend/backend.rs`)
-
-Order: **`AXON_NATIVE_TOOLCHAIN`** → **`./bootstrap-compiler/`** (must contain `crates/axon-cli`) → **`./rust-self-compiler-for-axon/`**. If none apply, self-hosted `axon` uses the self-reinvoke path (no Cargo in-tree).
-
-## Verification
+Verification:
 
 ```
 ./scripts/verify-self-bootstrap.sh
 ```
 
-Uses `bootstrap-compiler/Cargo.toml`, or **`AXON_BOOTSTRAP_MANIFEST`**.
+Uses **`AXON_BOOTSTRAP_MANIFEST`**, then the manifest search paths above.
+
+## Native artifact boundary (`src/compiler/backend/backend.rs`)
+
+Migrating pipeline: FFI entrypoints orchestrate codegen + **`target/build/axon/axon`** layout; codegen still lives largely in **`axon-codegen`** until it is ported into Axon sources and sidecars here.
+
 
 ## Axon codegen limitations
 
