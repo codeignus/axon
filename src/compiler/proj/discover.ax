@@ -74,3 +74,13 @@ func strip_src_and_ext(path: String) String
     if string_ends_with(no_src, ".ax"):
         return axon_string_sub(no_src, 0, axon_string_count(no_src, "") - 3)
     return no_src
+
+pub func classify_file_pair(ax_path: String) String
+    rs_path := ax_path
+    if string_ends_with(ax_path, ".ax"):
+        base_len := axon_string_count(ax_path, "") - 3
+        rs_path = axon_string_sub(ax_path, 0, base_len) + ".rs"
+    rs_exists := path_exists(rs_path)
+    if rs_exists:
+        return "has-sidecar"
+    return "pure-axon"

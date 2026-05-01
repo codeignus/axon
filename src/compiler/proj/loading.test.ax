@@ -7,6 +7,14 @@ test list_compiler_modules_returns_layout
 test discover_entry_returns_main_path
     assert_eq(discover_entry(), "./src/main.ax")
 
+test discover_classify_has_sidecar
+    result := classify_file_pair("src/compiler/proj/discover.ax")
+    assert_eq(result, "has-sidecar")
+
+test discover_classify_pure_axon
+    result := classify_file_pair("src/compiler/proj/build_file.ax")
+    assert_eq(result, "pure-axon")
+
 test resolve_check_target_returns_project_scope
     assert_eq(resolve_check_target(""), "project")
 
