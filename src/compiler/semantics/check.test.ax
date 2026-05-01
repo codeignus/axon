@@ -33,3 +33,18 @@ test semantic_snippet_rejects_arg_type_mismatch
     source := "func takes_int(v: Int) Int\n    return v\n\nfunc main() Int\n    takes_int(\"bad\")\n    return 0\n"
     got := run_semantic_check_for_source(source)
     assert_eq(message_is_error(got), "yes")
+
+test resolve_detects_duplicate_braced_imports
+    source := "import\n    compiler/a { foo }\n    compiler/b { foo }\n\nfunc main() void\n    return\n"
+    got := check_duplicate_braced_imports(source)
+    assert_eq(string_contains(got, "duplicate import"), true)
+
+test resolve_accepts_distinct_braced_imports
+    source := "import\n    compiler/a { foo }\n    compiler/b { bar }\n\nfunc main() void\n    return\n"
+    got := check_duplicate_braced_imports(source)
+    assert_eq(got, "")
+
+test resolve_accepts_empty_source
+    source := ""
+    got := check_duplicate_braced_imports(source)
+    assert_eq(got, "")

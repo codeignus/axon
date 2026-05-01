@@ -214,6 +214,7 @@ Expected: project/module errors and target-scope errors are produced by Axon-own
 
 **Tasks:**
 - [x] **Incremental Phase 4:** **`semantics.rs`** `parse_import_bindings` now flags **duplicate braced import lines** for the same module path (same-line duplicate symbols were already caught). Full resolver parity still open.
+- [x] **Incremental Phase 4b:** **`resolve.ax`** `check_duplicate_braced_imports` detects cross-line duplicate symbols in braced imports using pure Axon; tests in **`check.test.ax`**. **`command_targets.ax`** `validate_test_file_path` enforces test file must be `src/**/*.test.ax` or `tests/**/*.ax`.
 - [ ] Port symbol tables, scope, visibility rules.
 - [ ] Port resolver: duplicate decls (functions, types, structs, enums, traits, errors, tests); imports (unresolved, self-import, duplicate, private direct, public direct, namespace, alias namespace, import/declaration collision); struct/enum/trait member duplicates; method/associated `self` rules.
 - [ ] Reduce `semantics.rs` to file iteration / string transport. No semantic decisions.

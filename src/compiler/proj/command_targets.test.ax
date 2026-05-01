@@ -9,3 +9,15 @@ test fmt_scope_name
 
 test fmt_matches_check_scope
 	assert_eq(fileset_name_for_command("fmt"), fileset_name_for_command("check"))
+
+test validate_src_test_file
+	assert_eq(validate_test_file_path("src/compiler/syntax/parser.test.ax"), "ok")
+
+test validate_tests_dir_file
+	assert_eq(validate_test_file_path("tests/integration.ax"), "ok")
+
+test reject_non_test_file_in_src
+	assert_eq(validate_test_file_path("src/main.ax"), "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)")
+
+test reject_random_path
+	assert_eq(validate_test_file_path("random.ax"), "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)")

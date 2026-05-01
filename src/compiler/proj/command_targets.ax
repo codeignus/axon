@@ -30,3 +30,10 @@ pub func target_is_project_scope(target: String) bool
 
 pub func target_is_file_scope(target: String) bool
     return string_ends_with(target, ".ax") and axon_string_starts_with(target, "file:")
+
+pub func validate_test_file_path(path: String) String
+    if axon_string_starts_with(path, "src/") && string_ends_with(path, ".test.ax"):
+        return "ok"
+    if axon_string_starts_with(path, "tests/") && string_ends_with(path, ".ax"):
+        return "ok"
+    return "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)"

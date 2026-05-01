@@ -81,3 +81,73 @@ pub func resolve_import_names(source: String) String
 
 pub func resolve_symbol_arity(source: String) String
     return scan_arity_entries(source, 0, count_lines(source), "")
+
+pub func check_duplicate_braced_imports(source: String) String
+    symbols := collect_import_symbols(source, 0, count_lines(source), false, "")
+    return check_sym_list_for_dups(symbols, 0, "", "")
+
+func check_sym_list_for_dups(symbols: String, pos: i64, seen: String, errors: String) String
+    part := next_comma_part(symbols, pos)
+    if string_len(part) == 0:
+        return errors
+    sym := axon_string_trim(part)
+    if string_len(sym) > 0:
+        if sym_in_seen(seen, sym, 0) == true:
+            new_err := "error: duplicate import '" + sym + "'\n"
+            return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), seen, errors + new_err)
+        if string_len(seen) == 0:
+            return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), sym, errors)
+        return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), seen + "|" + sym, errors)
+    return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), seen, errors)
+
+func next_comma_part(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    return scan_to_comma(s, pos)
+
+func scan_to_comma(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if c == ",":
+        return ""
+    return c + scan_to_comma(s, pos + 1)
+
+func advance_past_comma(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return pos
+    c := axon_string_char_at(s, pos)
+    if c == ",":
+        return pos + 1
+    return advance_past_comma(s, pos + 1)
+
+func sym_in_seen(seen: String, sym: String, pos: i64) bool
+    if string_len(seen) == 0:
+        return false
+    part := next_pipe_part(seen, pos)
+    if string_len(part) == 0:
+        return false
+    if part == sym:
+        return true
+    return sym_in_seen(seen, sym, advance_past_pipe(seen, pos))
+
+func next_pipe_part(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    return scan_to_pipe(s, pos)
+
+func scan_to_pipe(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if c == "|":
+        return ""
+    return c + scan_to_pipe(s, pos + 1)
+
+func advance_past_pipe(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return pos
+    c := axon_string_char_at(s, pos)
+    if c == "|":
+        return pos + 1
+    return advance_past_pipe(s, pos + 1)
