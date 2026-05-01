@@ -144,3 +144,102 @@ func collect_indented_body(text: String, acc: String) String
     if axon_string_count(acc, "") == 0:
         return collect_indented_body(skip_n_lines(text, 1), dep_line)
     return collect_indented_body(skip_n_lines(text, 1), string_concat(string_concat(acc, "\n"), dep_line))
+
+pub func parse_deps_entries(body: String) String
+    if axon_string_count(body, "") == 0:
+        return ""
+    total := axon_string_count(body, "\n") + 1
+    return parse_dep_lines(body, total, 0, "")
+
+func parse_dep_lines(body: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_manifest_line(body, idx))
+    if axon_string_count(line, "") == 0:
+        return parse_dep_lines(body, total, idx + 1, acc)
+    entry := parse_single_dep_entry(line)
+    if axon_string_count(entry, "") == 0:
+        return parse_dep_lines(body, total, idx + 1, acc)
+    if axon_string_count(acc, "") == 0:
+        return parse_dep_lines(body, total, idx + 1, entry)
+    return parse_dep_lines(body, total, idx + 1, string_concat(string_concat(acc, ","), entry))
+
+func parse_single_dep_entry(line: String) String
+    eq_pos := find_char_pos(line, "=", 0)
+    if eq_pos < 0:
+        return ""
+    name := axon_string_trim(axon_string_sub(line, 0, eq_pos))
+    rest := axon_string_trim(axon_string_sub(line, eq_pos + 1, axon_string_count(line, "") - eq_pos - 1))
+    version := extract_dep_version(rest)
+    return string_concat(string_concat(name, ":"), version)
+
+func find_char_pos(s: String, ch: String, pos: i64) i64
+    if pos >= axon_string_count(s, ""):
+        return -1
+    if axon_string_char_at(s, pos) == ch:
+        return pos
+    return find_char_pos(s, ch, pos + 1)
+
+func extract_dep_version(s: String) String
+    if axon_string_count(s, "") == 0:
+        return ""
+    first := axon_string_char_at(s, 0)
+    if first == "\"":
+        end := find_char_pos(s, "\"", 1)
+        if end < 0:
+            return s
+        return axon_string_sub(s, 1, end - 1)
+    if first == "{":
+        return extract_version_from_braces(s)
+    return s
+
+func extract_version_from_braces(s: String) String
+    kw_pos := find_substring(s, "version")
+    if kw_pos < 0:
+        return ""
+    after_kw := axon_string_sub(s, kw_pos + 7, axon_string_count(s, "") - kw_pos - 7)
+    trimmed := axon_string_trim(after_kw)
+    if axon_string_count(trimmed, "") == 0:
+        return ""
+    colon := axon_string_char_at(trimmed, 0)
+    if colon == ":":
+        trimmed = axon_string_trim(axon_string_sub(trimmed, 1, axon_string_count(trimmed, "") - 1))
+    if axon_string_count(trimmed, "") == 0:
+        return ""
+    eq := axon_string_char_at(trimmed, 0)
+    if eq == "=":
+        trimmed = axon_string_trim(axon_string_sub(trimmed, 1, axon_string_count(trimmed, "") - 1))
+    return extract_dep_version(trimmed)
+
+func find_substring(s: String, needle: String) i64
+    s_len := axon_string_count(s, "")
+    n_len := axon_string_count(needle, "")
+    if n_len > s_len:
+        return -1
+    return find_substring_at(s, needle, s_len, n_len, 0)
+
+func find_substring_at(s: String, needle: String, s_len: i64, n_len: i64, pos: i64) i64
+    if pos + n_len > s_len:
+        return -1
+    candidate := axon_string_sub(s, pos, n_len)
+    if candidate == needle:
+        return pos
+    return find_substring_at(s, needle, s_len, n_len, pos + 1)
+
+pub func parse_rust_deps_body(manifest: String) String
+    body := extract_deps_body(manifest, "rust_deps")
+    if axon_string_count(body, "") == 0:
+        return ""
+    return parse_deps_entries(body)
+
+pub func parse_go_deps_body(manifest: String) String
+    body := extract_deps_body(manifest, "go_deps")
+    if axon_string_count(body, "") == 0:
+        return ""
+    return parse_deps_entries(body)
+
+pub func parse_python_deps_body(manifest: String) String
+    body := extract_deps_body(manifest, "python_deps")
+    if axon_string_count(body, "") == 0:
+        return ""
+    return parse_deps_entries(body)

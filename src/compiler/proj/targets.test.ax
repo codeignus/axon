@@ -1,3 +1,23 @@
+import
+    compiler/proj/targets {
+        resolve_check_target,
+        resolve_test_target
+    }
+    compiler/proj/command_targets {
+        run_command_name,
+        scope_name_for_command,
+        fileset_name_for_command,
+        resolve_check_target_path,
+        resolve_build_target_path,
+        resolve_test_target_path,
+        target_is_project_scope,
+        target_is_file_scope,
+        validate_test_file_path,
+        resolve_check_targets,
+        resolve_test_targets,
+        validate_target_in_project
+    }
+
 test resolve_empty_target_to_project
     assert_eq(resolve_check_target(""), "project")
 
@@ -15,3 +35,91 @@ test resolve_dir_target
 
 test resolve_recursive_dir_target
     assert_eq(resolve_check_target("src/compiler/..."), "dir-recursive:src/compiler")
+
+test resolve_test_empty_to_project
+    assert_eq(resolve_test_target(""), "test:project")
+
+test resolve_test_file_target
+    assert_eq(resolve_test_target("src/foo.test.ax"), "file:src/foo.test.ax")
+
+test resolve_test_dir_target
+    assert_eq(resolve_test_target("src/compiler"), "dir:src/compiler")
+
+test resolve_test_recursive_target
+    assert_eq(resolve_test_target("src/..."), "dir-recursive:src")
+
+test scope_name_check
+    assert_eq(scope_name_for_command("check"), "check")
+
+test scope_name_test
+    assert_eq(scope_name_for_command("test"), "test")
+
+test scope_name_build
+    assert_eq(scope_name_for_command("build"), "project-build")
+
+test scope_name_run
+    assert_eq(scope_name_for_command("run"), "project-run")
+
+test target_is_project_scope_empty
+    assert_eq(target_is_project_scope(""), true)
+
+test target_is_project_scope_keyword
+    assert_eq(target_is_project_scope("project"), true)
+
+test target_is_project_scope_other
+    assert_eq(target_is_project_scope("src/foo.ax"), false)
+
+test target_is_file_scope_valid
+    assert_eq(target_is_file_scope("file:src/foo.ax"), true)
+
+test target_is_file_scope_plain
+    assert_eq(target_is_file_scope("src/foo.ax"), false)
+
+test validate_test_src_test_ax
+    assert_eq(validate_test_file_path("src/compiler/syntax/parser.test.ax"), "ok")
+
+test validate_test_tests_dir
+    assert_eq(validate_test_file_path("tests/integration.ax"), "ok")
+
+test validate_test_reject_src_app
+    assert_eq(validate_test_file_path("src/main.ax"), "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)")
+
+test validate_test_reject_random
+    assert_eq(validate_test_file_path("random.ax"), "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)")
+
+test resolve_check_targets_project_returns_files
+    files := resolve_check_targets("")
+    assert_eq(axon_string_starts_with(files, "error:"), false)
+
+test resolve_check_targets_file_returns_path
+    result := resolve_check_targets("src/main.ax")
+    assert_eq(result, "src/main.ax")
+
+test resolve_test_targets_project_returns_tests
+    files := resolve_test_targets("")
+    assert_eq(axon_string_starts_with(files, "error:"), false)
+
+test validate_target_in_project_empty_is_ok
+    result := validate_target_in_project("", ".")
+    assert_eq(result, "ok")
+
+test validate_target_in_project_project_is_ok
+    result := validate_target_in_project("project", ".")
+    assert_eq(result, "ok")
+
+test validate_target_in_project_existing_file
+    result := validate_target_in_project("src/main.ax", ".")
+    assert_eq(result, "ok")
+
+test validate_target_in_project_missing_file
+    result := validate_target_in_project("src/nonexistent.ax", ".")
+    assert_eq(string_contains(result, "error:"), true)
+
+test resolve_build_target_empty_is_project
+    assert_eq(resolve_build_target_path(""), "project")
+
+test resolve_build_target_dot_is_dir
+    assert_eq(resolve_build_target_path("."), "dir:.")
+
+test resolve_dotdotdot_target
+    assert_eq(resolve_check_target("..."), "dir-recursive:.")

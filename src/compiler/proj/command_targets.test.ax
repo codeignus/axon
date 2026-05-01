@@ -1,3 +1,19 @@
+import
+    compiler/proj/command_targets {
+        run_command_name,
+        scope_name_for_command,
+        fileset_name_for_command,
+        resolve_check_target_path,
+        resolve_build_target_path,
+        resolve_test_target_path,
+        target_is_project_scope,
+        target_is_file_scope,
+        validate_test_file_path,
+        resolve_check_targets,
+        resolve_test_targets,
+        validate_target_in_project
+    }
+
 test check_scope_name
 	assert_eq(scope_name_for_command("check"), "check")
 
@@ -21,3 +37,21 @@ test reject_non_test_file_in_src
 
 test reject_random_path
 	assert_eq(validate_test_file_path("random.ax"), "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)")
+
+test resolve_check_targets_project_scope
+	files := resolve_check_targets("")
+	assert_eq(axon_string_starts_with(files, "error:"), false)
+
+test resolve_test_targets_project_scope
+	files := resolve_test_targets("")
+	assert_eq(axon_string_starts_with(files, "error:"), false)
+
+test validate_project_root_target
+	assert_eq(validate_target_in_project("", "."), "ok")
+
+test validate_existing_file_target
+	assert_eq(validate_target_in_project("src/main.ax", "."), "ok")
+
+test validate_missing_file_target
+	result := validate_target_in_project("src/nope.ax", ".")
+	assert_eq(string_contains(result, "error:"), true)

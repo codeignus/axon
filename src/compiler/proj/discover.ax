@@ -110,3 +110,26 @@ func find_last_slash(s: String, pos: i64) i64
     if axon_string_char_at(s, pos) == "/":
         return pos
     return find_last_slash(s, pos - 1)
+
+pub func collect_all_source_files(root: String) String
+    src_path := string_concat(root, "/src")
+    return list_all_ax_files(src_path)
+
+pub func collect_app_files(root: String) String
+    return list_ax_files(string_concat(root, "/src"))
+
+pub func collect_test_files(root: String) String
+    return list_test_files(root)
+
+pub func collect_sidecar_files(root: String) String
+    return list_sidecar_files(root)
+
+pub func module_name_for_file(path: String) String
+    no_prefix := path
+    if axon_string_starts_with(path, "src/"):
+        no_prefix = axon_string_sub(path, 4, axon_string_count(path, "") - 4)
+    if string_ends_with(no_prefix, ".test.ax"):
+        return axon_string_sub(no_prefix, 0, axon_string_count(no_prefix, "") - 8)
+    if string_ends_with(no_prefix, ".ax"):
+        return axon_string_sub(no_prefix, 0, axon_string_count(no_prefix, "") - 3)
+    return no_prefix

@@ -61,18 +61,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "axon-native-build"
-version = "0.1.0"
-dependencies = [
- "axon-codegen",
-]
-
-[[package]]
 name = "axon-runtime"
 version = "0.1.0"
 dependencies = [
  "axon-frontend",
  "axon-types",
+]
+
+[[package]]
+name = "axon-sidecars"
+version = "0.1.0"
+dependencies = [
+ "axon-codegen",
 ]
 
 [[package]]

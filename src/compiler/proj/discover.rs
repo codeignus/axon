@@ -61,14 +61,14 @@ fn normalize_root(path: &str) -> PathBuf {
 }
 
 /// Recursively walks `root`, collecting non-test `.ax` file paths into `out`.
-fn walk_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
+fn discover_walk_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
     let entries = std::fs::read_dir(root)
         .map_err(|e| format!("error: discover: cannot read {}: {e}", root.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("error: discover: bad dir entry: {e}"))?;
         let path = entry.path();
         if path.is_dir() {
-            walk_ax_files(&path, out)?;
+            discover_walk_ax_files(&path, out)?;
             continue;
         }
         if is_project_ax_source(&path) {
@@ -117,7 +117,7 @@ fn discover_entry() -> String {
 fn list_ax_files(root: &str) -> String {
     let root_path = normalize_root(root);
     let mut files: Vec<String> = Vec::new();
-    if let Err(err) = walk_ax_files(&root_path, &mut files) {
+    if let Err(err) = discover_walk_ax_files(&root_path, &mut files) {
         return err;
     }
     files.sort();
@@ -258,4 +258,101 @@ fn path_exists(path: &str) -> bool {
 #[axon_export]
 fn path_is_dir(path: &str) -> bool {
     std::path::Path::new(path).is_dir()
+}
+
+/// FFI: Lists ALL `.ax` files under `root` (including `.test.ax`).
+/// Returns newline-separated file paths, sorted.
+#[axon_export]
+fn list_all_ax_files(root: &str) -> String {
+    let root_path = normalize_root(root);
+    let mut files: Vec<String> = Vec::new();
+    if let Err(err) = collect_all_ax_files(&root_path, &mut files) {
+        return err;
+    }
+    files.sort();
+    files.join("\n")
+}
+
+/// Recursively walks `root`, collecting `.test.ax` files into `out`.
+fn discover_walk_test_ax_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let entries = std::fs::read_dir(root)
+        .map_err(|e| format!("error: discover: cannot read {}: {e}", root.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("error: discover: bad dir entry: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            discover_walk_test_ax_files(&path, out)?;
+            continue;
+        }
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if name.ends_with(".test.ax") {
+            out.push(path.to_string_lossy().to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Recursively walks `root`, collecting `.ax` files under `tests/` directories.
+fn discover_walk_tests_dir_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let tests_dir = root.join("tests");
+    if tests_dir.is_dir() {
+        collect_all_ax_files(&tests_dir, out)?;
+    }
+    Ok(())
+}
+
+/// FFI: Lists test files under `root`: `.test.ax` files under `src/` plus
+/// `.ax` files under `tests/`. Returns newline-separated, sorted.
+#[axon_export]
+fn list_test_files(root: &str) -> String {
+    let root_path = normalize_root(root);
+    let mut files: Vec<String> = Vec::new();
+    let _ = discover_walk_test_ax_files(&root_path.join("src"), &mut files);
+    let _ = discover_walk_tests_dir_files(&root_path, &mut files);
+    files.sort();
+    files.join("\n")
+}
+
+/// Recursively walks `root`, collecting `.rs` and `.go` sidecar files.
+fn discover_walk_sidecar_files(root: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let entries = std::fs::read_dir(root)
+        .map_err(|e| format!("error: discover: cannot read {}: {e}", root.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("error: discover: bad dir entry: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            discover_walk_sidecar_files(&path, out)?;
+            continue;
+        }
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext == "rs" || ext == "go" {
+            out.push(path.to_string_lossy().to_string());
+        }
+    }
+    Ok(())
+}
+
+/// FFI: Lists sidecar files (`.rs` and `.go`) under `root/src/`.
+/// Returns newline-separated, sorted.
+#[axon_export]
+fn list_sidecar_files(root: &str) -> String {
+    let root_path = normalize_root(root);
+    let src_path = root_path.join("src");
+    let mut files: Vec<String> = Vec::new();
+    if src_path.is_dir() {
+        if let Err(err) = discover_walk_sidecar_files(&src_path, &mut files) {
+            return err;
+        }
+    }
+    files.sort();
+    files.join("\n")
+}
+
+/// FFI: Canonicalizes a filesystem path. Returns the resolved path or "error:...".
+#[axon_export]
+fn path_canonicalize(path: &str) -> String {
+    match std::path::Path::new(path).canonicalize() {
+        Ok(p) => p.to_string_lossy().to_string(),
+        Err(e) => format!("error: {}", e),
+    }
 }

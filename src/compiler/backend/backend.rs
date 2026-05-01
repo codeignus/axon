@@ -1,15 +1,22 @@
-/// Sidecar: native codegen driver + artifact publish. Builds the in-tree migration binary
-/// `axon-native-build` (Cargo package under `src/compiler/backend/axon_native_build/`) which links
-/// the legacy `axon-codegen` library via path dependency until equivalent logic lives in `.ax`.
+/// Sidecar: native codegen driver + artifact publish. Builds the migration driver
+/// binary via `src/Cargo.toml` (the single Cargo package under src/) which links
+/// `axon-codegen`. No separate Cargo workspace — the Cargo.toml lives beside the
+/// .ax files, matching the sidecar policy in AGENTS.md.
+///
+// LANG-GAP: using sidecar for native codegen until Axon codegen lands.
+// The axon-codegen crate pulls in LLVM (C++ library) via inkwell, which
+// cannot be linked through the staticlib bridge used by .rs sidecars.
+// Instead, src/Cargo.toml produces a binary (axon-native-build) that this
+// sidecar invokes as a subprocess.
 
-const MIGRATION_CRATE_REL: &str = "src/compiler/backend/axon_native_build/Cargo.toml";
+const MIGRATION_CRATE_REL: &str = "src/Cargo.toml";
 
 fn workspace_root_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(".")
 }
 
 fn default_migration_binary_path(root: &std::path::Path) -> std::path::PathBuf {
-    root.join("target/debug/axon-native-build")
+    root.join("target/native-build-driver/debug/axon-native-build")
 }
 
 fn ensure_migration_driver_binary(root: &std::path::Path) -> Result<std::path::PathBuf, String> {
@@ -50,7 +57,7 @@ fn ensure_migration_driver_binary(root: &std::path::Path) -> Result<std::path::P
     }
     cargo.arg("build");
     cargo.arg("--manifest-path").arg(manifest_str);
-    cargo.arg("-p").arg("axon-native-build");
+    cargo.arg("-p").arg("axon-sidecars");
     cargo.arg("--quiet");
     cargo.env("CARGO_TARGET_DIR", &target_dir);
     for key in [

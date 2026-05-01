@@ -1,0 +1,26 @@
+# Temporary bridge Cargo package for sidecars that need axon-codegen.
+# This is NOT a separate Rust compiler project. It is scaffolding under src/
+# that lets the migration driver binary link the axon-codegen library.
+# Delete when the Axon build system handles native codegen natively.
+#
+# LANG-GAP: using sidecar for native codegen until Axon codegen lands.
+# The axon-codegen crate pulls in LLVM (C++ library) via inkwell, which
+# cannot be linked through the staticlib bridge used by .rs sidecars.
+# Instead, this Cargo.toml produces a binary (axon-native-build) that
+# the backend.rs sidecar invokes as a subprocess.
+#
+# See AGENTS.md "Sidecar policy during migration" and "Native bring-up".
+
+[package]
+name = "axon-sidecars"
+version = "0.1.0"
+edition = "2021"
+description = "Temporary scaffolding: migration driver binary that links axon-codegen. Remove when native codegen is fully in .ax files."
+publish = false
+
+[[bin]]
+name = "axon-native-build"
+path = "axon_native_build_bin/main.rs"
+
+[dependencies]
+axon-codegen = { path = "../../depreciating-soon-compiler-do-not-rename/crates/axon-codegen" }

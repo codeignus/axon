@@ -1,5 +1,11 @@
 //! Migration driver: runs the real check/build/test pipeline from `axon-codegen` (Rust)
 //! against the cwd project, then publishes the app binary under `target/build/<bin>/`.
+//!
+//! This is the binary entry point for the `axon-native-build` binary produced by
+//! `src/Cargo.toml`. It replaces the old separate Cargo package at
+//! `src/compiler/backend/axon_native_build/`.
+//!
+// LANG-GAP: using sidecar binary for native codegen until Axon codegen lands.
 
 use axon_codegen::target_resolution::find_project_root_from_cwd;
 use std::path::{Path, PathBuf};
