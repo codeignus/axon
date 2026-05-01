@@ -164,7 +164,7 @@ Expected: lexer diagnostics come from Axon. Parity diff: zero.
 - [x] **Phase 2 Parser:** `parser.ax` gains token stream navigation, matching bracket scanner, function/method header parsing with return type, dedent tracking. Tests in **`parser.test.ax`** for func/method/struct/enum/import parsing.
 - [ ] Port remaining: full expression precedence, f-string, match arms, `?T`/`!T` stacked sigils.
 - [ ] Reduce `parser.rs` to file walk + UTF-8 read only.
-- [ ] Convert `lexer.ax` mut/while helpers to recursion.
+- [x] Convert `lexer.ax` mut/while helpers to recursion. All `.ax` files now pure recursion — zero `mut`/`while` constructs remain across entire `src/` tree.
 
 **Verification:**
 ```bash

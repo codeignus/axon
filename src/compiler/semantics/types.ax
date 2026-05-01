@@ -153,26 +153,29 @@ pub func type_check_return(declared: String, actual: String) String
     return "error:type:return-mismatch:expected " + declared + ", got " + actual
 
 func find_pipe_from(s: String, start: i64) i64
-    mut i: i64 = start
-    while i < string_len(s):
-        if axon_string_char_at(s, i) == "|":
-            return i
-        i = i + 1
-    return string_len(s)
+    return find_pipe_from_rec(s, start)
+
+func find_pipe_from_rec(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return string_len(s)
+    if axon_string_char_at(s, pos) == "|":
+        return pos
+    return find_pipe_from_rec(s, pos + 1)
 
 func extract_type_from_env(env: String, name: String) String
     prefix := "|" + name + ":"
-    prefix_len := string_len(prefix)
-    mut i: i64 = 0
-    while i < string_len(env):
-        rest := axon_string_sub(env, i, string_len(env) - i)
-        if axon_string_starts_with(rest, prefix):
-            type_start := i + prefix_len
-            pipe_pos := find_pipe_from(env, type_start)
-            length := pipe_pos - type_start
-            return axon_string_sub(env, type_start, length)
-        i = i + 1
-    return ""
+    return extract_type_rec(env, prefix, string_len(prefix), 0)
+
+func extract_type_rec(env: String, prefix: String, prefix_len: i64, pos: i64) String
+    if pos >= string_len(env):
+        return ""
+    rest := axon_string_sub(env, pos, string_len(env) - pos)
+    if axon_string_starts_with(rest, prefix):
+        type_start := pos + prefix_len
+        pipe_pos := find_pipe_from(env, type_start)
+        length := pipe_pos - type_start
+        return axon_string_sub(env, type_start, length)
+    return extract_type_rec(env, prefix, prefix_len, pos + 1)
 
 pub func lookup_type(name: String, env: String) String
     result := extract_type_from_env(env, name)
@@ -184,39 +187,44 @@ pub func add_binding(env: String, name: String, ty: String) String
     return env + name + ":" + ty + "|"
 
 func find_comma_from(s: String, start: i64) i64
-    mut i: i64 = start
-    while i < string_len(s):
-        if axon_string_char_at(s, i) == ",":
-            return i
-        i = i + 1
-    return string_len(s)
+    return find_comma_from_rec(s, start)
+
+func find_comma_from_rec(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return string_len(s)
+    if axon_string_char_at(s, pos) == ",":
+        return pos
+    return find_comma_from_rec(s, pos + 1)
 
 func extract_nth_entry(s: String, idx: i64) String
-    mut current: i64 = 0
-    mut start: i64 = 0
-    mut i: i64 = 0
-    while i <= string_len(s):
-        at_end := i == string_len(s)
-        is_sep := false
-        if at_end == false:
-            is_sep = axon_string_char_at(s, i) == ","
-        if at_end or is_sep:
-            if current == idx:
-                return axon_string_sub(s, start, i - start)
-            current = current + 1
-            start = i + 1
-        i = i + 1
-    return ""
+    return extract_nth_entry_rec(s, idx, 0, 0)
+
+func extract_nth_entry_rec(s: String, target: i64, current: i64, start: i64) String
+    return extract_nth_scan(s, target, current, start, start)
+
+func extract_nth_scan(s: String, target: i64, current: i64, start: i64, pos: i64) String
+    if pos > string_len(s):
+        return ""
+    if pos == string_len(s):
+        if current == target:
+            return axon_string_sub(s, start, pos - start)
+        return ""
+    is_sep := axon_string_char_at(s, pos) == ","
+    if is_sep:
+        if current == target:
+            return axon_string_sub(s, start, pos - start)
+        return extract_nth_scan(s, target, current + 1, pos + 1, pos + 1)
+    return extract_nth_scan(s, target, current, start, pos + 1)
 
 pub func type_check_call(callee_return: String, arg_types: String, param_types: String) String
-    mut idx: i64 = 0
-    while true:
-        a := extract_nth_entry(arg_types, idx)
-        p := extract_nth_entry(param_types, idx)
-        if string_len(a) == 0 and string_len(p) == 0:
-            return callee_return
-        if string_len(a) > 0 and string_len(p) > 0:
-            if type_compatible(p, a) == false:
-                return "error:type:arg-mismatch:arg " + arity_char(idx) + " expected " + p + ", got " + a
-        idx = idx + 1
-    return callee_return
+    return type_check_call_rec(callee_return, arg_types, param_types, 0)
+
+func type_check_call_rec(callee_return: String, arg_types: String, param_types: String, idx: i64) String
+    a := extract_nth_entry(arg_types, idx)
+    p := extract_nth_entry(param_types, idx)
+    if string_len(a) == 0 && string_len(p) == 0:
+        return callee_return
+    if string_len(a) > 0 && string_len(p) > 0:
+        if type_compatible(p, a) == false:
+            return "error:type:arg-mismatch:arg " + arity_char(idx) + " expected " + p + ", got " + a
+    return type_check_call_rec(callee_return, arg_types, param_types, idx + 1)
