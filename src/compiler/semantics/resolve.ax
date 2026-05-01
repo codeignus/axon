@@ -1,5 +1,5 @@
 import
-    compiler/types/composites/string { string_len }
+    compiler/types/composites/string { string_len, string_contains }
 
 func scan_import_lines(source: String, idx: i64, total: i64, in_import: bool, errors: String) String
     if idx >= total:
@@ -765,3 +765,71 @@ pub func resolve_aliased_imports(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
     return scan_import_alias_entries(source, 0, count_lines(source), false, "")
+
+// --- type sigil helpers: ?T, T!, ?T! ---
+
+// Strip the ? prefix from a type string, returning (is_optional, inner_type)
+pub func unwrap_optional(type_str: String) String
+    if axon_string_starts_with(type_str, "?"):
+        inner := axon_string_sub(type_str, 1, string_len(type_str) - 1)
+        return "true|" + inner
+    return "false|" + type_str
+
+// Strip the ! postfix from a type string, returning (is_errorable, inner_type)
+pub func unwrap_errorable(type_str: String) String
+    if string_len(type_str) > 1 && axon_string_char_at(type_str, string_len(type_str) - 1) == "!":
+        inner := axon_string_sub(type_str, 0, string_len(type_str) - 1)
+        return "true|" + inner
+    return "false|" + type_str
+
+// Classify a type string into its sigil composition
+// Returns: "plain" | "optional" | "errorable" | "optional_errorable"
+pub func classify_type_sigil(type_str: String) String
+    has_q := axon_string_starts_with(type_str, "?")
+    has_bang := string_len(type_str) > 1 && axon_string_char_at(type_str, string_len(type_str) - 1) == "!"
+    if has_q && has_bang:
+        return "optional_errorable"
+    if has_q:
+        return "optional"
+    if has_bang:
+        return "errorable"
+    return "plain"
+
+// Get the inner type (strip both ? prefix and ! postfix)
+pub func strip_type_sigils(type_str: String) String
+    stripped := type_str
+    if axon_string_starts_with(stripped, "?"):
+        stripped := axon_string_sub(stripped, 1, string_len(stripped) - 1)
+    if string_len(stripped) > 1 && axon_string_char_at(stripped, string_len(stripped) - 1) == "!":
+        stripped := axon_string_sub(stripped, 0, string_len(stripped) - 1)
+    return stripped
+
+// Check match arm compatibility: given a matched type's sigil class,
+// return the allowed arm set as a comma-separated string
+pub func allowed_match_arms(sigil_class: String) String
+    if sigil_class == "optional":
+        return "value,nil"
+    if sigil_class == "errorable":
+        return "value,error"
+    if sigil_class == "optional_errorable":
+        return "value,nil,error"
+    return ""
+
+// Compute the residual type after a match with missing arms
+// Returns the result type sigil, or "T" if all handled
+pub func match_residual_type(sigil_class: String, handled_arms: String) String
+    all := allowed_match_arms(sigil_class)
+    if all == "":
+        return "T"
+    has_value := string_contains(handled_arms, "value")
+    has_nil := string_contains(handled_arms, "nil")
+    has_error := string_contains(handled_arms, "error")
+    missing_nil := string_contains(all, "nil") && has_nil == false
+    missing_error := string_contains(all, "error") && has_error == false
+    if missing_nil && missing_error:
+        return "?T!"
+    if missing_nil:
+        return "?T"
+    if missing_error:
+        return "T!"
+    return "T"

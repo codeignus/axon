@@ -1,0 +1,120 @@
+import
+    compiler/types/composites/string { string_contains }
+
+// --- type sigil classification tests ---
+
+test classify_plain_type
+    got := classify_type_sigil("i64")
+    assert_eq(got, "plain")
+
+test classify_string_type
+    got := classify_type_sigil("String")
+    assert_eq(got, "plain")
+
+test classify_optional_type
+    got := classify_type_sigil("?i64")
+    assert_eq(got, "optional")
+
+test classify_optional_string
+    got := classify_type_sigil("?String")
+    assert_eq(got, "optional")
+
+test classify_errorable_type
+    got := classify_type_sigil("i64!")
+    assert_eq(got, "errorable")
+
+test classify_errorable_string
+    got := classify_type_sigil("String!")
+    assert_eq(got, "errorable")
+
+test classify_optional_errorable
+    got := classify_type_sigil("?i64!")
+    assert_eq(got, "optional_errorable")
+
+test classify_optional_errorable_string
+    got := classify_type_sigil("?String!")
+    assert_eq(got, "optional_errorable")
+
+// --- unwrap tests ---
+
+test unwrap_optional_present
+    got := unwrap_optional("?i64")
+    assert_eq(string_contains(got, "true"), true)
+    assert_eq(string_contains(got, "i64"), true)
+
+test unwrap_optional_absent
+    got := unwrap_optional("i64")
+    assert_eq(string_contains(got, "false"), true)
+    assert_eq(string_contains(got, "i64"), true)
+
+test unwrap_errorable_present
+    got := unwrap_errorable("String!")
+    assert_eq(string_contains(got, "true"), true)
+    assert_eq(string_contains(got, "String"), true)
+
+test unwrap_errorable_absent
+    got := unwrap_errorable("String")
+    assert_eq(string_contains(got, "false"), true)
+    assert_eq(string_contains(got, "String"), true)
+
+// --- allowed match arms tests ---
+
+test allowed_arms_optional
+    got := allowed_match_arms("optional")
+    assert_eq(got, "value,nil")
+
+test allowed_arms_errorable
+    got := allowed_match_arms("errorable")
+    assert_eq(got, "value,error")
+
+test allowed_arms_optional_errorable
+    got := allowed_match_arms("optional_errorable")
+    assert_eq(got, "value,nil,error")
+
+test allowed_arms_plain
+    got := allowed_match_arms("plain")
+    assert_eq(got, "")
+
+// --- match residual type tests ---
+
+test residual_all_handled
+    got := match_residual_type("optional_errorable", "value,nil,error")
+    assert_eq(got, "T")
+
+test residual_nil_propagates
+    got := match_residual_type("optional_errorable", "value,error")
+    assert_eq(got, "?T")
+
+test residual_error_propagates
+    got := match_residual_type("optional_errorable", "value,nil")
+    assert_eq(got, "T!")
+
+test residual_both_propagate
+    got := match_residual_type("optional_errorable", "value")
+    assert_eq(got, "?T!")
+
+test residual_optional_fully_handled
+    got := match_residual_type("optional", "value,nil")
+    assert_eq(got, "T")
+
+test residual_errorable_fully_handled
+    got := match_residual_type("errorable", "value,error")
+    assert_eq(got, "T")
+
+// --- strip sigils tests ---
+
+test strip_plain
+    got := strip_type_sigils("i64")
+    assert_eq(got, "i64")
+
+test strip_optional
+    got := strip_type_sigils("?i64")
+    assert_eq(got, "i64")
+
+test strip_errorable
+    got := strip_type_sigils("i64!")
+    assert_eq(got, "i64")
+
+test strip_optional_errorable
+    got := strip_type_sigils("?i64!")
+    assert_eq(got, "i64")

@@ -323,27 +323,41 @@ func parse_type_from(tokens: String, pos: i64) String
             inner_end := find_matching_close(tokens, pos + 1, TOKEN_LT(), TOKEN_GT())
             if inner_end < 0:
                 return text
-            return text + "<" + parse_type_from(tokens, pos + 2) + ">"
+            inner := parse_type_from(tokens, pos + 2)
+            result := text + "<" + inner + ">"
+            // Check for postfix ! (errorable)
+            after_gt := inner_end + 1
+            if token_kind_at(tokens, after_gt) == TOKEN_BANG():
+                return result + "!"
+            return result
         if next == TOKEN_LBRACK():
             inner_end := find_matching_close(tokens, pos + 1, TOKEN_LBRACK(), TOKEN_RBRACK())
             if inner_end < 0:
                 return text + "[]"
             return text + "[]"
+        // Check for postfix ! (errorable): TypeName!
+        if next == TOKEN_BANG():
+            return text + "!"
         return text
     if kind == TOKEN_LPAREN():
         rparen := find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
         if rparen < 0:
             return ""
-        return "(" + collect_types_in_parens(tokens, pos + 1, rparen) + ")"
+        inner := "(" + collect_types_in_parens(tokens, pos + 1, rparen) + ")"
+        // Check for postfix ! after parenthesized type
+        after_rparen := rparen + 1
+        if token_kind_at(tokens, after_rparen) == TOKEN_BANG():
+            return inner + "!"
+        return inner
     if kind == TOKEN_QUESTION():
         inner := parse_type_from(tokens, pos + 1)
+        if inner == "":
+            return ""
+        // Check for ?T! (optional-errorable): ? followed by type that ends with !
         return "?" + inner
     if kind == TOKEN_STAR():
         inner := parse_type_from(tokens, pos + 1)
         return "*" + inner
-    if kind == TOKEN_BANG():
-        inner := parse_type_from(tokens, pos + 1)
-        return "!" + inner
     return ""
 
 func collect_types_in_parens(tokens: String, pos: i64, end: i64) String
@@ -383,6 +397,13 @@ func skip_type_tokens(tokens: String, pos: i64, limit: i64) i64
         comma := token_kind_at(tokens, pos + 1)
         if comma == TOKEN_COMMA():
             return pos + 2
+        // Check for postfix ! (errorable)
+        bang := token_kind_at(tokens, pos + 1)
+        if bang == TOKEN_BANG():
+            after_bang := token_kind_at(tokens, pos + 2)
+            if after_bang == TOKEN_COMMA():
+                return pos + 3
+            return pos + 2
         return pos + 1
     if kind == TOKEN_LPAREN():
         rparen := find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
@@ -392,7 +413,7 @@ func skip_type_tokens(tokens: String, pos: i64, limit: i64) i64
         if comma == TOKEN_COMMA():
             return rparen + 2
         return rparen + 1
-    if kind == TOKEN_QUESTION() || kind == TOKEN_STAR() || kind == TOKEN_BANG():
+    if kind == TOKEN_QUESTION() || kind == TOKEN_STAR():
         inner := skip_type_tokens(tokens, pos + 1, limit)
         return inner
     return pos + 1
