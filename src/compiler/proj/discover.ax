@@ -84,3 +84,29 @@ pub func classify_file_pair(ax_path: String) String
     if rs_exists:
         return "has-sidecar"
     return "pure-axon"
+
+pub func import_path_to_file_path(import_path: String) String
+    direct := "src/" + import_path + ".ax"
+    if path_exists(direct):
+        return direct
+    last := last_component(import_path)
+    dir_mod := "src/" + import_path + "/" + last + ".ax"
+    if path_exists(dir_mod):
+        return dir_mod
+    dir_check := "src/" + import_path
+    if path_is_dir(dir_check):
+        return "dir:" + dir_check
+    return "not-found"
+
+func last_component(path: String) String
+    slash := find_last_slash(path, axon_string_count(path, "") - 1)
+    if slash < 0:
+        return path
+    return axon_string_sub(path, slash + 1, axon_string_count(path, "") - slash - 1)
+
+func find_last_slash(s: String, pos: i64) i64
+    if pos < 0:
+        return -1
+    if axon_string_char_at(s, pos) == "/":
+        return pos
+    return find_last_slash(s, pos - 1)
