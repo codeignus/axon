@@ -241,6 +241,10 @@ func peek_byte(source: String, pos: i64) i64
         return -1
     return axon_string_byte_at(source, pos)
 
+// LANG-GAP: The functions below use mut/while which are not valid Axon syntax.
+// They need to be converted to recursive style before the Axon parser can parse this file.
+// Currently unused by the working pipeline (lexer.rs handles actual lexing).
+
 pub func lex_skip_whitespace(source: String, pos: i64) i64
     mut p: i64 = pos
     mut len: i64 = string_len(source)

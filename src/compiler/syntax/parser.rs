@@ -1,6 +1,16 @@
-// String-aware delimiter balance for project-level parse checks.
-// `parser.ax`/`check_balance_simple` is a naive count helper only — project checks rely on this.
-fn describe_parse_impl(source: &str) -> String {
+// File-I/O sidecar for the Axon-native parser.
+// Parsing logic truth lives in parser.ax. This file provides:
+//   1. Filesystem walk for the parse-check pipeline
+//   2. run_parse_check / parse_stage_failed as #[axon_pub_export] FFI
+//      needed by pipeline_check.ax
+//
+// LANG-GAP: run_parse_check and parse_stage_failed stay here until Axon can
+// export FFI-callable functions directly. The validation logic inside
+// parse_file_content is the minimal character-level delimiter scan that matches
+// validate_delimiters_char_scan in parser.ax. Full token-stream validation
+// lives in parser.ax::describe_parse_source.
+
+fn parse_file_content(source: &str) -> String {
     let mut stack: Vec<char> = Vec::new();
     let chars: Vec<char> = source.chars().collect();
     let mut i = 0usize;
@@ -48,15 +58,10 @@ fn describe_parse_impl(source: &str) -> String {
     }
 }
 
-#[axon_export]
-fn describe_parse(source: &str) -> String {
-    describe_parse_impl(source)
-}
-
 fn parse_file(path: &std::path::Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path)
         .map_err(|e| format!("error: cannot read {}: {e}", path.display()))?;
-    let result = describe_parse_impl(&src);
+    let result = parse_file_content(&src);
     match result.starts_with("error:") {
         true => Err(format!("error: {}: {}", path.display(), result)),
         false => Ok(()),

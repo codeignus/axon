@@ -1,3 +1,6 @@
+// LANG-GAP: filesystem path checking for import resolution — sidecar needed
+// until Axon has std::fs or equivalent. Ported import-path logic is in
+// resolve.ax (scan_import_lines calls axon_import_path_exists).
 fn expected_import_path_exists(import_path: &str) -> bool {
     let root = PathBuf::from("src");
     let direct_file = root.join(format!("{import_path}.ax"));
@@ -19,6 +22,9 @@ fn expected_import_path_exists(import_path: &str) -> bool {
     module_dir.exists()
 }
 
+// LANG-GAP: func name+arity parsing — duplicated in semantics.ax as
+// parse_func_name_from_line / parse_func_arity_from_decl. Sidecar retained
+// until project-level walk can be done from Axon.
 fn parse_func_name_and_arity(line: &str) -> Option<(String, usize)> {
     let func_part = if let Some(rest) = line.strip_prefix("func ") {
         rest
@@ -46,6 +52,9 @@ fn parse_func_name_and_arity(line: &str) -> Option<(String, usize)> {
     Some((name, arity))
 }
 
+// LANG-GAP: call-site name+arity parsing — duplicated in semantics.ax as
+// parse_call_name_from_line / parse_call_arity_from_line. Sidecar kept for
+// project-level verification (needs filesystem walk).
 fn parse_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
@@ -135,6 +144,8 @@ fn parse_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     None
 }
 
+// LANG-GAP: method call parsing — duplicated in semantics.ax as
+// find_dot_method / count_method_args. Sidecar kept for project-level walk.
 fn parse_method_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
@@ -209,6 +220,10 @@ fn parse_method_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     None
 }
 
+// LANG-GAP: snippet-level semantic check — fully ported to semantics.ax
+// (axon_semantic_check). This Rust version is kept as a thin shim so the
+// `run_semantic_check` #[axon_export] can delegate. When project-level checks
+// move to .ax, this becomes unnecessary.
 #[axon_export]
 fn run_semantic_check(source: &str) -> String {
     if source.trim().is_empty() {
@@ -269,6 +284,10 @@ fn run_semantic_check(source: &str) -> String {
     "ok:semantic-snippet".to_string()
 }
 
+// LANG-GAP: project-level signature collection — needs filesystem walk
+// (std::fs). The Axon-native duplicate declaration check is in resolve.ax
+// (check_duplicate_declarations_axon). This sidecar does cross-file arity
+// unification which requires Axon to gain directory iteration primitives.
 fn collect_project_function_signatures(
     root: &Path,
 ) -> Result<HashMap<String, usize>, String> {
@@ -384,6 +403,12 @@ fn collect_project_function_signatures(
     Ok(sigs)
 }
 
+// LANG-GAP: project-level call verification — needs filesystem walk.
+// Import resolution, visibility checking, and symbol resolution are now in
+// resolve.ax (check_self_import_axon, check_import_collision_axon,
+// check_visibility_axon, resolve_all_imports_axon). This sidecar handles
+// cross-module arity matching and Rust #[axon_export] discovery which
+// require filesystem access.
 fn verify_project_calls(
     root: &Path,
     sigs: &HashMap<String, usize>,
@@ -714,6 +739,9 @@ fn verify_project_calls(
     walk(root, sigs, &module_symbols)
 }
 
+// LANG-GAP: project semantic orchestrator — thin wrapper around filesystem
+// operations. The per-file semantic logic is now in .ax files. This remains
+// as a sidecar until Axon can walk directories.
 fn semantic_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
@@ -734,6 +762,7 @@ fn semantic_check_message(root: &str) -> String {
     }
 }
 
+// LANG-GAP: filesystem walk for counting checked .ax files.
 fn walk_and_check(root: &Path) -> Result<usize, String> {
     let mut checked = 0usize;
     let entries = std::fs::read_dir(root)
@@ -752,6 +781,10 @@ fn walk_and_check(root: &Path) -> Result<usize, String> {
     }
     Ok(checked)
 }
+
+// LANG-GAP: string primitives — these are FFI string operations used by .ax
+// code. They remain as sidecars until Axon has native string indexing. See
+// resolve.ax and semantics.ax for the semantic logic that calls these.
 
 #[axon_export]
 fn axon_import_path_exists(path: &str) -> bool {

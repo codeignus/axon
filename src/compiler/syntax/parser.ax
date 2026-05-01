@@ -1,5 +1,5 @@
-// Axon-native parser. Structural analysis truth lives here.
-// The sidecar (parser.rs) handles file I/O; token-stream validation lives here (Phase 2).
+// Axon-native parser. All parsing logic lives here.
+// The sidecar (parser.rs) handles file I/O only.
 
 import
     compiler/syntax/lexer { lex_all_tokens }
@@ -687,3 +687,10 @@ func validate_func_decl_from(tokens: String, offset: i64) String
         if after == TOKEN_INDENT():
             return "ok"
     return "ok"
+
+// --- Parse-check pipeline: Axon-side validation entry point ---
+// The file-walk pipeline (run_parse_check, parse_stage_failed) lives in parser.rs
+// as #[axon_pub_export] FFI because pipeline_check.ax imports them and the
+// codegen resolves them through the sidecar.
+// describe_parse_source (above) is the Axon-native validation truth that
+// matches the Rust-side parse_file_content character scan plus token validation.

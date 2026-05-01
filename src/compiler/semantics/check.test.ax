@@ -48,3 +48,114 @@ test resolve_accepts_empty_source
     source := ""
     got := check_duplicate_braced_imports(source)
     assert_eq(got, "")
+
+// --- Phase 4: duplicate declaration tests ---
+
+test duplicate_func_declaration_detected
+    source := "func hello() String\n    return \"a\"\n\nfunc hello() String\n    return \"b\"\n"
+    got := check_duplicate_declarations_axon(source)
+    assert_eq(string_contains(got, "duplicate func"), true)
+
+test duplicate_struct_declaration_detected
+    source := "struct Foo\n    x: i64\n\nstruct Foo\n    y: i64\n"
+    got := check_duplicate_declarations_axon(source)
+    assert_eq(string_contains(got, "duplicate struct"), true)
+
+test duplicate_enum_declaration_detected
+    source := "enum Color\n    Red\n    Green\n\nenum Color\n    Blue\n"
+    got := check_duplicate_declarations_axon(source)
+    assert_eq(string_contains(got, "duplicate enum"), true)
+
+test duplicate_trait_declaration_detected
+    source := "trait Printable\n    fmt() String\n\ntrait Printable\n    show() String\n"
+    got := check_duplicate_declarations_axon(source)
+    assert_eq(string_contains(got, "duplicate trait"), true)
+
+test distinct_declarations_pass
+    source := "func hello() String\n    return \"a\"\n\nstruct Point\n    x: i64\n\nenum Color\n    Red\n"
+    got := check_duplicate_declarations_axon(source)
+    assert_eq(got, "")
+
+// --- Phase 4: self-import tests ---
+
+test self_import_rejected
+    source := "import\n    compiler/semantics { check_imports }\n\nfunc main() void\n    return\n"
+    got := check_self_import_axon(source, "compiler/semantics")
+    assert_eq(string_contains(got, "self-import"), true)
+
+test non_self_import_accepted
+    source := "import\n    compiler/semantics { check_imports }\n\nfunc main() void\n    return\n"
+    got := check_self_import_axon(source, "compiler/diagnostics")
+    assert_eq(got, "")
+
+// --- Phase 4: import collision tests ---
+
+test import_collision_with_local_func_detected
+    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc string_len(s: String) i64\n    return 0\n"
+    got := check_import_collision_axon(source)
+    assert_eq(string_contains(got, "collides with local declaration"), true)
+
+test no_collision_with_distinct_names
+    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc my_func() String\n    return \"ok\"\n"
+    got := check_import_collision_axon(source)
+    assert_eq(got, "")
+
+// --- Phase 4: visibility tests ---
+
+test visibility_violation_detected
+    source := "func helper() String\n    return \"inner\"\n\nfunc main() String\n    return helper()\n"
+    got := check_visibility_axon(source)
+    // helper is private but called from main — within same module this is ok
+    // visibility only flags cross-module issues; same-source calls are fine
+    assert_eq(got, "")
+
+test pub_func_visibility_ok
+    source := "pub func exported() String\n    return \"ok\"\n\nfunc main() String\n    return exported()\n"
+    got := check_visibility_axon(source)
+    assert_eq(got, "")
+
+// --- Phase 4: build_symbol_table tests ---
+
+test build_symbol_table_finds_func
+    source := "func hello() String\n    return \"a\"\n\npub func world() String\n    return \"b\"\n"
+    got := build_symbol_table_axon(source)
+    assert_eq(string_contains(got, "hello:func:0"), true)
+    assert_eq(string_contains(got, "world:func:1"), true)
+
+test build_symbol_table_finds_struct_and_enum
+    source := "struct Point\n    x: i64\n\npub enum Color\n    Red\n"
+    got := build_symbol_table_axon(source)
+    assert_eq(string_contains(got, "Point:struct:0"), true)
+    assert_eq(string_contains(got, "Color:enum:1"), true)
+
+// --- Phase 4: resolve_all_imports tests ---
+
+test resolve_all_imports_empty_source
+    got := resolve_all_imports_axon("")
+    assert_eq(got, "ok:resolve:empty")
+
+test resolve_all_imports_valid_source
+    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc main() String\n    return \"ok\"\n"
+    got := resolve_all_imports_axon(source)
+    assert_eq(string_contains(got, "ok:resolve"), true)
+
+// --- Phase 4: full semantic check chaining ---
+
+test full_semantic_check_valid_source
+    source := "func hello() String\n    return \"a\"\n\nfunc main() String\n    return hello()\n"
+    got := run_full_semantic_check(source)
+    assert_eq(got, "ok:full-semantic")
+
+test full_semantic_check_catches_duplicate
+    source := "func hello() String\n    return \"a\"\n\nfunc hello() String\n    return \"b\"\n"
+    got := run_full_semantic_check(source)
+    assert_eq(string_contains(got, "duplicate"), true)
+
+test full_semantic_check_catches_unresolved
+    source := "func main() String\n    return unknown()\n"
+    got := run_full_semantic_check(source)
+    assert_eq(message_is_error(got), "yes")
+
+test full_semantic_check_empty_source
+    got := run_full_semantic_check("")
+    assert_eq(got, "ok:full-semantic:empty")

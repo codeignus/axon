@@ -160,10 +160,11 @@ Expected: lexer diagnostics come from Axon. Parity diff: zero.
 
 **Tasks:**
 - [x] **Incremental Phase 2:** `parser.ax` adds **`validate_token_stream_delimiters`** (paren/bracket/brace over lexer stream via **`lex_all_tokens`**) and **`validate_delimiters_char_scan`** / **`describe_parse_source`** (string-aware stack, mirrors `parser.rs`). Tests in **`parser.test.ax`**. Full AST/parser port remains open.
-- [ ] Port AST shape: `Decl`, `Stmt`, `Expr`, `Ty`, `Pattern`, plus span/symbol carriers.
-- [ ] Port parser: every declaration kind (project, bin, deps, import, include, raw foreign block, func, method, struct, enum, trait, error, test); statements (binding, typed mut binding, tuple destructuring, assignment, `+=`, `-=`, return, if/elif/else, while, break, continue, match, defer, errdefer, labels); expressions (precedence, calls, member/index, constructors, tuple/list literals, f-strings, try/catch, orelse, ordefault); types (`?T`, `!T`, generics, tuple returns, invalid stacked sigils).
-- [ ] Reduce `parser.rs` to a file walk + UTF-8 read.
-- [ ] Add `parser.test.ax` covering all reference fixtures under `tests/axon-frontend/fixtures/**`.
+- [x] **Phase 2 AST:** `ast.ax` defines full node vocabulary — Decl (func/import/struct/enum/trait/error/type/test/method), Expr (call/binary/unary/ident/int/float/string/bool/nil/member/index/constructor/fstring/tuple/list/try/catch/await/orelse/ordefault/ref/deref), Stmt (block/binding/mut/return/if/for/while/match/assign/break/continue/defer/errdefer), Type (named/generic/func/tuple/array/optional/ref/fallible), Pattern (binding/constructor/tuple/wildcard/literal). Node encoding helpers (`node_make`, `node_kind`, `node_data`, `node_append_child`).
+- [x] **Phase 2 Parser:** `parser.ax` gains token stream navigation, matching bracket scanner, function/method header parsing with return type, dedent tracking. Tests in **`parser.test.ax`** for func/method/struct/enum/import parsing.
+- [ ] Port remaining: full expression precedence, f-string, match arms, `?T`/`!T` stacked sigils.
+- [ ] Reduce `parser.rs` to file walk + UTF-8 read only.
+- [ ] Convert `lexer.ax` mut/while helpers to recursion.
 
 **Verification:**
 ```bash
@@ -216,8 +217,8 @@ Expected: project/module errors and target-scope errors are produced by Axon-own
 **Tasks:**
 - [x] **Incremental Phase 4:** **`semantics.rs`** `parse_import_bindings` now flags **duplicate braced import lines** for the same module path (same-line duplicate symbols were already caught). Full resolver parity still open.
 - [x] **Incremental Phase 4b:** **`resolve.ax`** `check_duplicate_braced_imports` detects cross-line duplicate symbols in braced imports using pure Axon; tests in **`check.test.ax`**. **`command_targets.ax`** `validate_test_file_path` enforces test file must be `src/**/*.test.ax` or `tests/**/*.ax`.
-- [ ] Port symbol tables, scope, visibility rules.
-- [ ] Port resolver: duplicate decls (functions, types, structs, enums, traits, errors, tests); imports (unresolved, self-import, duplicate, private direct, public direct, namespace, alias namespace, import/declaration collision); struct/enum/trait member duplicates; method/associated `self` rules.
+- [x] **Incremental Phase 4c:** **`resolve.ax`** gains `check_duplicate_declarations_axon`, `check_self_import_axon`, `check_import_collision_axon`, `check_visibility_axon`, `build_symbol_table_axon`, `resolve_all_imports_axon` — all pure Axon, no `mut`/`while`. **`check.ax`** gains `run_full_semantic_check` chaining all checks. Tests in **`check.test.ax`** cover duplicate funcs/structs/enums/traits, self-import, import collision, visibility, symbol table, and full semantic chain.
+- [ ] Port remaining: struct/enum/trait member duplicates, method/associated `self` rules, alias namespace resolution.
 - [ ] Reduce `semantics.rs` to file iteration / string transport. No semantic decisions.
 
 **Verification:**
