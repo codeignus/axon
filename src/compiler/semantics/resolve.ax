@@ -1,5 +1,5 @@
 import
-    compiler/complex_types/string { string_len }
+    compiler/types/composites/string { string_len }
 
 func scan_import_lines(source: String, idx: i64, total: i64, in_import: bool, errors: String) String
     if idx >= total:

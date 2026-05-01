@@ -1,5 +1,5 @@
 import
-    compiler/complex_types/string { string_len }
+    compiler/types/composites/string { string_len }
 
 func is_ident_char(c: String) bool
     if c == "_":

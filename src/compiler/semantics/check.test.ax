@@ -91,12 +91,12 @@ test non_self_import_accepted
 // --- Phase 4: import collision tests ---
 
 test import_collision_with_local_func_detected
-    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc string_len(s: String) i64\n    return 0\n"
+    source := "import\n    compiler/types/composites/string { string_len }\n\nfunc string_len(s: String) i64\n    return 0\n"
     got := check_import_collision_axon(source)
     assert_eq(string_contains(got, "collides with local declaration"), true)
 
 test no_collision_with_distinct_names
-    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc my_func() String\n    return \"ok\"\n"
+    source := "import\n    compiler/types/composites/string { string_len }\n\nfunc my_func() String\n    return \"ok\"\n"
     got := check_import_collision_axon(source)
     assert_eq(got, "")
 
@@ -135,7 +135,7 @@ test resolve_all_imports_empty_source
     assert_eq(got, "ok:resolve:empty")
 
 test resolve_all_imports_valid_source
-    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc main() String\n    return \"ok\"\n"
+    source := "import\n    compiler/types/composites/string { string_len }\n\nfunc main() String\n    return \"ok\"\n"
     got := resolve_all_imports_axon(source)
     assert_eq(string_contains(got, "ok:resolve"), true)
 
@@ -280,7 +280,7 @@ test import_distinct_aliases_pass
     assert_eq(got, "")
 
 test import_no_aliases_pass
-    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc main() void\n    return\n"
+    source := "import\n    compiler/types/composites/string { string_len }\n\nfunc main() void\n    return\n"
     got := check_import_alias_conflicts(source)
     assert_eq(got, "")
 
@@ -297,7 +297,7 @@ test resolve_aliased_imports_finds_aliases
     assert_eq(string_contains(got, "fb=compiler/b"), true)
 
 test resolve_aliased_imports_empty_when_no_aliases
-    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc main() void\n    return\n"
+    source := "import\n    compiler/types/composites/string { string_len }\n\nfunc main() void\n    return\n"
     got := resolve_aliased_imports(source)
     assert_eq(got, "")
 

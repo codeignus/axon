@@ -1,5 +1,5 @@
 import
-    compiler/complex_types/string { string_len }
+    compiler/types/composites/string { string_len }
 
 pub func run_semantic_check_for_source(source: String) String
     return axon_semantic_check(source)

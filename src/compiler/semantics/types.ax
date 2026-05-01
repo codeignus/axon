@@ -1,6 +1,6 @@
 import
     compiler/diagnostics/diagnostics { stage_should_abort }
-    compiler/complex_types/string { string_len }
+    compiler/types/composites/string { string_len }
 
 pub func check_types(source: String) String
     return axon_semantic_check(source)

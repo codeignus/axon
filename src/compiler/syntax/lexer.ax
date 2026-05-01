@@ -1,5 +1,5 @@
 import
-    compiler/complex_types/string { string_len }
+    compiler/types/composites/string { string_len }
 
 // Axon-native lexer. Tokenization truth lives here.
 // The sidecar (lexer.rs) handles file I/O; unknown-token rejection mirrors classify_token rules.
