@@ -115,6 +115,55 @@ pub func collect_all_source_files(root: String) String
     src_path := string_concat(root, "/src")
     return list_all_ax_files(src_path)
 
+pub func discover_integration_tests(root: String) String
+    tests_dir := string_concat(root, "/tests")
+    dir_ok := path_is_dir(tests_dir)
+    if dir_ok == false:
+        return ""
+    files := list_all_ax_files(tests_dir)
+    if axon_string_starts_with(files, "error:"):
+        return ""
+    return filter_integration_tests(files, 0, axon_string_count(files, "\n") + 1, "")
+
+func filter_integration_tests(files: String, idx: i64, total: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_line_at(files, idx))
+    if axon_string_count(line, "") == 0:
+        return filter_integration_tests(files, idx + 1, total, acc)
+    if string_ends_with(line, ".test.ax"):
+        return filter_integration_tests(files, idx + 1, total, acc)
+    if acc == "":
+        return filter_integration_tests(files, idx + 1, total, line)
+    return filter_integration_tests(files, idx + 1, total, string_concat(string_concat(acc, "\n"), line))
+
+pub func discover_colocated_tests(root: String) String
+    files := list_all_ax_files(string_concat(root, "/src"))
+    if axon_string_starts_with(files, "error:"):
+        return ""
+    return filter_test_only(files, 0, axon_string_count(files, "\n") + 1, "")
+
+func filter_test_only(files: String, idx: i64, total: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_line_at(files, idx))
+    if axon_string_count(line, "") == 0:
+        return filter_test_only(files, idx + 1, total, acc)
+    if string_ends_with(line, ".test.ax"):
+        if acc == "":
+            return filter_test_only(files, idx + 1, total, line)
+        return filter_test_only(files, idx + 1, total, string_concat(string_concat(acc, "\n"), line))
+    return filter_test_only(files, idx + 1, total, acc)
+
+pub func discover_all_test_files(root: String) String
+    colocated := discover_colocated_tests(root)
+    integration := discover_integration_tests(root)
+    if axon_string_count(colocated, "") == 0:
+        return integration
+    if axon_string_count(integration, "") == 0:
+        return colocated
+    return string_concat(string_concat(colocated, "\n"), integration)
+
 pub func collect_app_files(root: String) String
     return list_ax_files(string_concat(root, "/src"))
 

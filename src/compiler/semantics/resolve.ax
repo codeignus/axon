@@ -205,14 +205,14 @@ func parse_decl_strip_pub(line: String) String
     return line
 
 func take_ident_safe(s: String) String
-    return take_ident_rec(s, 0)
+    return take_ident_step(s, 0)
 
-func take_ident_rec(s: String, pos: i64) String
+func take_ident_step(s: String, pos: i64) String
     if pos >= string_len(s):
         return ""
     c := axon_string_char_at(s, pos)
     if is_ident_char(c):
-        return c + take_ident_rec(s, pos + 1)
+        return c + take_ident_step(s, pos + 1)
     return ""
 
 func parse_decl_kind_from_line(line: String) String

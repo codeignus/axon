@@ -152,15 +152,15 @@ pub func type_check_return(declared: String, actual: String) String
         return "ok"
     return "error:type:return-mismatch:expected " + declared + ", got " + actual
 
-func find_pipe_from(s: String, start: i64) i64
-    return find_pipe_from_rec(s, start)
+func find_pipe_pos(s: String, start: i64) i64
+    return find_pipe_pos_rec(s, start)
 
-func find_pipe_from_rec(s: String, pos: i64) i64
+func find_pipe_pos_rec(s: String, pos: i64) i64
     if pos >= string_len(s):
         return string_len(s)
     if axon_string_char_at(s, pos) == "|":
         return pos
-    return find_pipe_from_rec(s, pos + 1)
+    return find_pipe_pos_rec(s, pos + 1)
 
 func extract_type_from_env(env: String, name: String) String
     prefix := "|" + name + ":"
@@ -172,7 +172,7 @@ func extract_type_rec(env: String, prefix: String, prefix_len: i64, pos: i64) St
     rest := axon_string_sub(env, pos, string_len(env) - pos)
     if axon_string_starts_with(rest, prefix):
         type_start := pos + prefix_len
-        pipe_pos := find_pipe_from(env, type_start)
+        pipe_pos := find_pipe_pos(env, type_start)
         length := pipe_pos - type_start
         return axon_string_sub(env, type_start, length)
     return extract_type_rec(env, prefix, prefix_len, pos + 1)
@@ -186,15 +186,15 @@ pub func lookup_type(name: String, env: String) String
 pub func add_binding(env: String, name: String, ty: String) String
     return env + name + ":" + ty + "|"
 
-func find_comma_from(s: String, start: i64) i64
-    return find_comma_from_rec(s, start)
+func find_comma_pos(s: String, start: i64) i64
+    return find_comma_pos_rec(s, start)
 
-func find_comma_from_rec(s: String, pos: i64) i64
+func find_comma_pos_rec(s: String, pos: i64) i64
     if pos >= string_len(s):
         return string_len(s)
     if axon_string_char_at(s, pos) == ",":
         return pos
-    return find_comma_from_rec(s, pos + 1)
+    return find_comma_pos_rec(s, pos + 1)
 
 func extract_nth_entry(s: String, idx: i64) String
     return extract_nth_entry_rec(s, idx, 0, 0)

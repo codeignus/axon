@@ -243,3 +243,39 @@ pub func parse_python_deps_body(manifest: String) String
     if axon_string_count(body, "") == 0:
         return ""
     return parse_deps_entries(body)
+
+// --- Multi-bin target support ---
+
+pub func extract_all_bin_targets(manifest: String) String
+    total := axon_string_count(manifest, "\n") + 1
+    return scan_bin_targets(manifest, total, 0, "")
+
+func scan_bin_targets(manifest: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if axon_string_starts_with(line, "bin "):
+        rest := axon_string_sub(line, 4, axon_string_count(line, "") - 4)
+        name := axon_string_trim(rest)
+        main_entry := scan_bin_main(manifest, total, idx + 1)
+        entry := string_concat(string_concat(name, ":"), main_entry)
+        if axon_string_count(acc, "") == 0:
+            return scan_bin_targets(manifest, total, idx + 1, entry)
+        return scan_bin_targets(manifest, total, idx + 1, string_concat(string_concat(acc, ","), entry))
+    return scan_bin_targets(manifest, total, idx + 1, acc)
+
+func scan_bin_main(manifest: String, total: i64, start: i64) String
+    return scan_bin_main_rec(manifest, total, start)
+
+func scan_bin_main_rec(manifest: String, total: i64, idx: i64) String
+    if idx >= total:
+        return "./src/main.ax"
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if axon_string_starts_with(line, "main:"):
+        raw := axon_string_sub(line, 5, axon_string_count(line, "") - 5)
+        return strip_optional_quotes(axon_string_trim(raw))
+    if axon_string_count(line, "") > 0 && axon_string_starts_with(line, "bin ") == false && axon_string_starts_with(line, "main:") == false:
+        return scan_bin_main_rec(manifest, total, idx + 1)
+    if line == "":
+        return scan_bin_main_rec(manifest, total, idx + 1)
+    return "./src/main.ax"
