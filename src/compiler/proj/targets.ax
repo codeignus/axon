@@ -1,5 +1,27 @@
 pub func resolve_check_target(path: String) String
-    return classify_check_target(path)
+    return axon_classify_check_target(path)
 
 pub func resolve_test_target(path: String) String
-    return classify_test_target(path)
+    return axon_classify_test_target(path)
+
+func axon_classify_check_target(path: String) String
+    if axon_string_count(path, "") == 0:
+        return "project"
+    if path == ".":
+        return "dir:."
+    if path == "./...":
+        return "dir-recursive:./"
+    if path == "...":
+        return "dir-recursive:."
+    if axon_string_count(path, "") >= 4:
+        if axon_string_sub(path, axon_string_count(path, "") - 4, 4) == "/...":
+            base := axon_string_sub(path, 0, axon_string_count(path, "") - 4)
+            return "dir-recursive:" + base
+    if string_ends_with(path, ".ax"):
+        return "file:" + path
+    return "dir:" + path
+
+func axon_classify_test_target(path: String) String
+    if axon_string_count(path, "") == 0:
+        return "test:project"
+    return axon_classify_check_target(path)

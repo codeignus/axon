@@ -189,8 +189,9 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 - [x] **Incremental Phase 3:** **`manifest_has_go_deps`**, **`manifest_has_python_deps`** in **`build_file.ax`** + tests in **`build_file.test.ax`**. Remaining loader parity still open.
 - [x] **Incremental Phase 3b:** **`manifest_has_deps`**, **`extract_deps_body`** (indented body extraction for `rust_deps`/`go_deps`/`python_deps`/`deps` blocks); hyphenated project name edge cases; tests in **`build_file.test.ax`**.
 - [ ] Port remainder: full `deps` block body parsing, parity with loader.
-- [ ] Port module discovery: app files, colocated `*.test.ax`, integration `tests/**/*.ax`, sidecar association, import-path → module-path conversion.
-- [ ] Port check/test target scopes: project, file, module, tree `...`, invalid outside-project path errors.
+- [x] **Incremental Phase 3c:** sidecar association (**`classify_file_pair`** in **`discover.ax`** — checks `.rs` beside `.ax`); import-path → file-path conversion (**`import_path_to_file_path`** — resolves `compiler/proj/build_file` to `src/compiler/proj/build_file.ax`, directory module, or not-found). Tests in **`loading.test.ax`**.
+- [x] **Incremental Phase 3d:** check/test target scopes now Axon-native in **`targets.ax`** (`axon_classify_check_target` / `axon_classify_test_target`) — no longer delegates to `targets.rs` sidecar. Covers project, dir, dir-recursive, file, and test:project scopes. Existing tests in **`targets.test.ax`** pass unchanged.
+- [ ] Port remaining loader edge cases (multi-bin targets, integration test isolation).
 - [ ] Keep Rust only for directory listing, canonicalization, file reads, existence checks.
 
 **Verification:**
