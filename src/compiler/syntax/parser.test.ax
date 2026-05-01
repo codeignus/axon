@@ -272,3 +272,25 @@ test validate_func_decl_pub
     stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5
     got := validate_func_decl(stream)
     assert_eq(got, "ok")
+
+// --- Phase 2: delimiter + token stream validation ---
+
+test validate_token_stream_delimiters_balanced
+    s := token_make("lparen", "(", 0, 1) + "\n" + token_make("rparen", ")", 1, 2)
+    assert_eq(validate_token_stream_delimiters(s), "ok")
+
+test validate_token_stream_delimiters_extra_paren
+    s := token_make("rparen", ")", 0, 1)
+    got := validate_token_stream_delimiters(s)
+    assert_eq(axon_string_contains(got, "extra"), true)
+
+test validate_delimiters_char_scan_ok
+    assert_eq(validate_delimiters_char_scan("func f() void\n    x := 1\n"), "ok")
+
+test validate_delimiters_char_scan_mismatch
+    got := validate_delimiters_char_scan("func f( void\n")
+    assert_eq(axon_string_contains(got, "mismatched"), true)
+
+test describe_parse_source_ok_minimal
+    got := describe_parse_source("func main() void\n    return\n")
+    assert_eq(got, "ok")

@@ -4,7 +4,9 @@ import
         extract_binary_name,
         extract_main_entry,
         extract_version_field,
-        manifest_has_rust_deps
+        manifest_has_rust_deps,
+        manifest_has_go_deps,
+        manifest_has_python_deps
     }
 
 test build_extract_main_strip_double_quotes
@@ -22,3 +24,11 @@ test build_manifest_has_rust_deps
 test build_manifest_no_rust_deps
     m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
     assert_eq(manifest_has_rust_deps(m), false)
+
+test build_manifest_has_go_deps
+    m := "project demo\ngo_deps\n    rsc.io/quote = \"v1\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_go_deps(m), true)
+
+test build_manifest_has_python_deps
+    m := "project demo\npython_deps\n    requests = \"2\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_python_deps(m), true)

@@ -159,6 +159,7 @@ Expected: lexer diagnostics come from Axon. Parity diff: zero.
 - Test: `src/compiler/syntax/parser.test.ax` + ported fixtures from reference `parser/decl.rs`, `expr.rs`, `stmt.rs`, `ty.rs`, `pattern.rs`.
 
 **Tasks:**
+- [x] **Incremental Phase 2:** `parser.ax` adds **`validate_token_stream_delimiters`** (paren/bracket/brace over lexer stream via **`lex_all_tokens`**) and **`validate_delimiters_char_scan`** / **`describe_parse_source`** (string-aware stack, mirrors `parser.rs`). Tests in **`parser.test.ax`**. Full AST/parser port remains open.
 - [ ] Port AST shape: `Decl`, `Stmt`, `Expr`, `Ty`, `Pattern`, plus span/symbol carriers.
 - [ ] Port parser: every declaration kind (project, bin, deps, import, include, raw foreign block, func, method, struct, enum, trait, error, test); statements (binding, typed mut binding, tuple destructuring, assignment, `+=`, `-=`, return, if/elif/else, while, break, continue, match, defer, errdefer, labels); expressions (precedence, calls, member/index, constructors, tuple/list literals, f-strings, try/catch, orelse, ordefault); types (`?T`, `!T`, generics, tuple returns, invalid stacked sigils).
 - [ ] Reduce `parser.rs` to a file walk + UTF-8 read.
@@ -185,6 +186,7 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 
 **Tasks:**
 - [x] `build_file.ax`: `main:` / `version:` strip optional quotes; `manifest_has_rust_deps` heuristic; **`discover.rs` `discover_entry`** reads `main:` from `build.ax`; tests in `proj/build_file.test.ax`.
+- [x] **Incremental Phase 3:** **`manifest_has_go_deps`**, **`manifest_has_python_deps`** in **`build_file.ax`** + tests in **`build_file.test.ax`**. Remaining loader parity still open.
 - [ ] Port remainder: hyphenated naming edge cases, `deps`, full `rust_deps`/go_deps block bodies, parity with loader.
 - [ ] Port module discovery: app files, colocated `*.test.ax`, integration `tests/**/*.ax`, sidecar association, import-path → module-path conversion.
 - [ ] Port check/test target scopes: project, file, module, tree `...`, invalid outside-project path errors.
@@ -210,6 +212,7 @@ Expected: project/module errors and target-scope errors are produced by Axon-own
 - Test: `src/compiler/semantics/{check,project_parity}.test.ax` + ported fixtures `tests/axon-semantics/fixtures/**`.
 
 **Tasks:**
+- [x] **Incremental Phase 4:** **`semantics.rs`** `parse_import_bindings` now flags **duplicate braced import lines** for the same module path (same-line duplicate symbols were already caught). Full resolver parity still open.
 - [ ] Port symbol tables, scope, visibility rules.
 - [ ] Port resolver: duplicate decls (functions, types, structs, enums, traits, errors, tests); imports (unresolved, self-import, duplicate, private direct, public direct, namespace, alias namespace, import/declaration collision); struct/enum/trait member duplicates; method/associated `self` rules.
 - [ ] Reduce `semantics.rs` to file iteration / string transport. No semantic decisions.

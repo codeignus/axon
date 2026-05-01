@@ -526,6 +526,7 @@ fn verify_project_calls(
         let mut in_import = false;
         let mut seen_modules: HashSet<String> = HashSet::new();
         let mut seen_symbols: HashSet<String> = HashSet::new();
+        let mut seen_brace_modules: HashSet<String> = HashSet::new();
         let mut line_num = 0usize;
         for line in source.lines() {
             line_num += 1;
@@ -543,6 +544,12 @@ fn verify_project_calls(
             }
             if let Some(open) = t.find('{') {
                 let module = t[..open].trim();
+                if !seen_brace_modules.insert(module.to_string()) {
+                    errors.push(format!(
+                        "error: duplicate import of module '{}' at line {}",
+                        module, line_num
+                    ));
+                }
                 let close = t.find('}').unwrap_or(t.len());
                 let inside = &t[open + 1..close];
                 for sym in inside.split(',') {

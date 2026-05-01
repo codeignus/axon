@@ -25,6 +25,14 @@ pub func manifest_has_rust_deps(manifest: String) bool
     total := axon_string_count(manifest, "\n") + 1
     return manifest_line_has_kw(manifest, total, 0, "rust_deps")
 
+pub func manifest_has_go_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "go_deps")
+
+pub func manifest_has_python_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "python_deps")
+
 func manifest_line_has_kw(manifest: String, total: i64, idx: i64, kw: String) bool
     if idx >= total:
         return false

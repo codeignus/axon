@@ -1,5 +1,11 @@
 // Axon-native parser. Structural analysis truth lives here.
-// The sidecar (parser.rs) handles file I/O; project checks use its string-aware balance.
+// The sidecar (parser.rs) handles file I/O; token-stream validation lives here (Phase 2).
+
+import
+    compiler/syntax/lexer { lex_all_tokens }
+    compiler/syntax/token {
+        TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_LBRACK, TOKEN_RBRACK, TOKEN_LBRACE, TOKEN_RBRACE
+    }
 
 // --- Existing helpers (preserved for tests) ---
 
@@ -12,6 +18,98 @@ pub func check_balance_simple(source: String) String
 
 pub func parse_balance_native(source: String) String
     return check_balance_simple(source)
+
+// --- Token stream delimiter contract (uses same lexer as lex stage) ---
+
+func parse_token_delim_scan_rec(tokens: String, pos: i64, paren: i64, brack: i64, brace: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        if paren == 0 and brack == 0 and brace == 0:
+            return "ok"
+        return "error: parse: unclosed delimiter in token stream"
+    if kind == TOKEN_LPAREN():
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren + 1, brack, brace)
+    if kind == TOKEN_RPAREN():
+        if paren <= 0:
+            return "error: parse: extra ')' in token stream"
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren - 1, brack, brace)
+    if kind == TOKEN_LBRACK():
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack + 1, brace)
+    if kind == TOKEN_RBRACK():
+        if brack <= 0:
+            return "error: parse: extra ']' in token stream"
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack - 1, brace)
+    if kind == TOKEN_LBRACE():
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack, brace + 1)
+    if kind == TOKEN_RBRACE():
+        if brace <= 0:
+            return "error: parse: extra '}' in token stream"
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack, brace - 1)
+    return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack, brace)
+
+pub func validate_token_stream_delimiters(tokens: String) String
+    t := axon_string_trim(tokens)
+    if t == "":
+        return "ok"
+    if axon_string_starts_with(t, "error|"):
+        return "error: lexer: bad token stream"
+    return parse_token_delim_scan_rec(tokens, 0, 0, 0, 0)
+
+// Character-aware delimiter scan (matches `parser.rs` describe_parse_impl; not naive counts).
+
+func delim_scan_rec(source: String, pos: i64, len: i64, in_string: bool, stack: String) String
+    if pos >= len:
+        if in_string:
+            return "error: unterminated string"
+        if axon_string_count(stack, "") > 0:
+            return "error: unclosed delimiter"
+        return "ok"
+    c := axon_string_char_at(source, pos)
+    if in_string:
+        if c == "\\":
+            next := pos + 2
+            if next > len:
+                return "error: unterminated string"
+            return delim_scan_rec(source, next, len, true, stack)
+        if c == "\"":
+            return delim_scan_rec(source, pos + 1, len, false, stack)
+        return delim_scan_rec(source, pos + 1, len, true, stack)
+    if c == "\"":
+        return delim_scan_rec(source, pos + 1, len, true, stack)
+    if c == "(":
+        return delim_scan_rec(source, pos + 1, len, false, stack + "(")
+    if c == "[":
+        return delim_scan_rec(source, pos + 1, len, false, stack + "[")
+    if c == "{":
+        return delim_scan_rec(source, pos + 1, len, false, stack + "{")
+    if c == ")":
+        sl := axon_string_count(stack, "")
+        if sl == 0 or axon_string_char_at(stack, sl - 1) != "(":
+            return "error: mismatched ')'"
+        return delim_scan_rec(source, pos + 1, len, false, axon_string_sub(stack, 0, sl - 1))
+    if c == "]":
+        sl := axon_string_count(stack, "")
+        if sl == 0 or axon_string_char_at(stack, sl - 1) != "[":
+            return "error: mismatched ']'"
+        return delim_scan_rec(source, pos + 1, len, false, axon_string_sub(stack, 0, sl - 1))
+    if c == "}":
+        sl := axon_string_count(stack, "")
+        if sl == 0 or axon_string_char_at(stack, sl - 1) != "{":
+            return "error: mismatched '}'"
+        return delim_scan_rec(source, pos + 1, len, false, axon_string_sub(stack, 0, sl - 1))
+    return delim_scan_rec(source, pos + 1, len, false, stack)
+
+pub func validate_delimiters_char_scan(source: String) String
+    if axon_string_trim(source) == "":
+        return "ok"
+    return delim_scan_rec(source, 0, axon_string_count(source, ""), false, "")
+
+pub func describe_parse_source(source: String) String
+    char_ok := validate_delimiters_char_scan(source)
+    if char_ok != "ok":
+        return char_ok
+    stream := lex_all_tokens(source)
+    return validate_token_stream_delimiters(stream)
 
 pub func count_function_declarations(source: String) i64
     total := axon_string_count(source, "func ")
