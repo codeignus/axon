@@ -1,3 +1,4 @@
+// ─── Filesystem helpers ───────────────────────────────────────────────
 // LANG-GAP: filesystem path checking for import resolution — sidecar needed
 // until Axon has std::fs or equivalent. Ported import-path logic is in
 // resolve.ax (scan_import_lines calls axon_import_path_exists).
@@ -22,9 +23,32 @@ fn expected_import_path_exists(import_path: &str) -> bool {
     module_dir.exists()
 }
 
-// LANG-GAP: func name+arity parsing — duplicated in semantics.ax as
+// LANG-GAP: filesystem walk for counting checked .ax files.
+fn walk_and_check(root: &Path) -> Result<usize, String> {
+    let mut checked = 0usize;
+    let entries = std::fs::read_dir(root)
+        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|e| format!("error: bad dir entry: {e}"))?
+            .path();
+        if path.is_dir() {
+            checked += walk_and_check(&path)?;
+            continue;
+        }
+        if is_project_ax_source(&path) {
+            checked += 1;
+        }
+    }
+    Ok(checked)
+}
+
+// ─── Parse helpers (retained for project-level walk only) ─────────────
+// LANG-GAP: func name+arity parsing — fully ported to semantics.ax as
 // parse_func_name_from_line / parse_func_arity_from_decl. Sidecar retained
-// until project-level walk can be done from Axon.
+// ONLY because collect_project_function_signatures and verify_project_calls
+// need filesystem walk which Axon cannot do yet. Delete both this function
+// and the project-level walkers once Axon gains directory iteration.
 fn parse_func_name_and_arity(line: &str) -> Option<(String, usize)> {
     let func_part = if let Some(rest) = line.strip_prefix("func ") {
         rest
@@ -52,9 +76,9 @@ fn parse_func_name_and_arity(line: &str) -> Option<(String, usize)> {
     Some((name, arity))
 }
 
-// LANG-GAP: call-site name+arity parsing — duplicated in semantics.ax as
-// parse_call_name_from_line / parse_call_arity_from_line. Sidecar kept for
-// project-level verification (needs filesystem walk).
+// LANG-GAP: call-site name+arity parsing — fully ported to semantics.ax as
+// parse_call_name_from_line / parse_call_arity_from_line. Sidecar retained
+// ONLY for verify_project_calls (needs filesystem walk). Delete with it.
 fn parse_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
@@ -144,8 +168,9 @@ fn parse_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     None
 }
 
-// LANG-GAP: method call parsing — duplicated in semantics.ax as
-// find_dot_method / count_method_args. Sidecar kept for project-level walk.
+// LANG-GAP: method call parsing — fully ported to semantics.ax as
+// find_dot_method / count_method_args. Sidecar retained ONLY for
+// verify_project_calls. Delete with it.
 fn parse_method_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
@@ -220,74 +245,12 @@ fn parse_method_call_name_and_arity(line: &str) -> Option<(String, usize)> {
     None
 }
 
-// LANG-GAP: snippet-level semantic check — fully ported to semantics.ax
-// (axon_semantic_check). This Rust version is kept as a thin shim so the
-// `run_semantic_check` #[axon_export] can delegate. When project-level checks
-// move to .ax, this becomes unnecessary.
-#[axon_export]
-fn run_semantic_check(source: &str) -> String {
-    if source.trim().is_empty() {
-        return "ok:semantic-snippet:empty".to_string();
-    }
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut func_arity: HashMap<String, usize> = HashMap::new();
-    for line in source.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed
-            .strip_prefix("func ")
-            .or_else(|| trimmed.strip_prefix("pub func "))
-        {
-            let name: String = rest
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect();
-            if name.is_empty() {
-                return "error: malformed function declaration in snippet".to_string();
-            }
-            if !seen.insert(name.clone()) {
-                return format!("error: duplicate function '{name}' in snippet");
-            }
-            if let Some((fname, arity)) = parse_func_name_and_arity(trimmed) {
-                func_arity.insert(fname, arity);
-            }
-            continue;
-        }
-        if let Some((callee, got_arity)) = parse_call_name_and_arity(trimmed) {
-            if let Some(expected_arity) = func_arity.get(&callee) {
-                if *expected_arity != got_arity {
-                    return format!(
-                        "error: arity mismatch calling '{callee}' (expected {}, got {got_arity}) in snippet",
-                        expected_arity
-                    );
-                }
-            } else {
-                return format!("error: unresolved symbol '{callee}' in snippet");
-            }
-        }
-        if let Some((method, got_arity)) = parse_method_call_name_and_arity(trimmed) {
-            if method == "len" {
-                let expected_arity = got_arity + 1;
-                let string_ok = func_arity
-                    .get("string_len")
-                    .map(|a| *a == expected_arity)
-                    .unwrap_or(false);
-                let array_ok = func_arity
-                    .get("array_len")
-                    .map(|a| *a == expected_arity)
-                    .unwrap_or(false);
-                if !string_ok && !array_ok {
-                    return format!("error: unresolved method '{method}' in snippet");
-                }
-            }
-        }
-    }
-    "ok:semantic-snippet".to_string()
-}
-
+// ─── Project-level semantic analysis (retained until Axon has dir iteration) ─
 // LANG-GAP: project-level signature collection — needs filesystem walk
 // (std::fs). The Axon-native duplicate declaration check is in resolve.ax
 // (check_duplicate_declarations_axon). This sidecar does cross-file arity
 // unification which requires Axon to gain directory iteration primitives.
+// Delete when project-level checks can walk directories from .ax.
 fn collect_project_function_signatures(
     root: &Path,
 ) -> Result<HashMap<String, usize>, String> {
@@ -408,7 +371,8 @@ fn collect_project_function_signatures(
 // resolve.ax (check_self_import_axon, check_import_collision_axon,
 // check_visibility_axon, resolve_all_imports_axon). This sidecar handles
 // cross-module arity matching and Rust #[axon_export] discovery which
-// require filesystem access.
+// require filesystem access. Delete when project-level checks can walk
+// directories from .ax.
 fn verify_project_calls(
     root: &Path,
     sigs: &HashMap<String, usize>,
@@ -545,6 +509,10 @@ fn verify_project_calls(
         line_num: usize,
     }
 
+    // LANG-GAP: import binding parsing — duplicated in resolve.ax
+    // (check_duplicate_braced_imports, collect_import_symbols).
+    // Retained here only because verify_project_calls needs it for cross-file
+    // arity matching during the filesystem walk. Delete with verify_project_calls.
     fn parse_import_bindings(source: &str) -> (Vec<ImportBinding>, Vec<String>) {
         let mut bindings = Vec::new();
         let mut errors = Vec::new();
@@ -740,8 +708,10 @@ fn verify_project_calls(
 }
 
 // LANG-GAP: project semantic orchestrator — thin wrapper around filesystem
-// operations. The per-file semantic logic is now in .ax files. This remains
-// as a sidecar until Axon can walk directories.
+// operations. The per-file semantic logic is now in .ax files (semantics.ax
+// axon_semantic_check, resolve.ax check_duplicate_declarations_axon, etc.).
+// This remains as a sidecar until Axon can walk directories.
+// Delete when project-level checks are done entirely from .ax.
 fn semantic_check_message(root: &str) -> String {
     let root_path = match root.is_empty() {
         true => project_entry_root_path(),
@@ -762,29 +732,7 @@ fn semantic_check_message(root: &str) -> String {
     }
 }
 
-// LANG-GAP: filesystem walk for counting checked .ax files.
-fn walk_and_check(root: &Path) -> Result<usize, String> {
-    let mut checked = 0usize;
-    let entries = std::fs::read_dir(root)
-        .map_err(|e| format!("error: cannot read {}: {e}", root.display()))?;
-    for entry in entries {
-        let path = entry
-            .map_err(|e| format!("error: bad dir entry: {e}"))?
-            .path();
-        if path.is_dir() {
-            checked += walk_and_check(&path)?;
-            continue;
-        }
-        if is_project_ax_source(&path) {
-            checked += 1;
-        }
-    }
-    Ok(checked)
-}
-
-// LANG-GAP: string primitives — these are FFI string operations used by .ax
-// code. They remain as sidecars until Axon has native string indexing. See
-// resolve.ax and semantics.ax for the semantic logic that calls these.
+// ─── FFI exports ──────────────────────────────────────────────────────
 
 #[axon_export]
 fn axon_import_path_exists(path: &str) -> bool {
@@ -800,6 +748,13 @@ fn run_semantic_project_check(root: &str) -> String {
 fn semantic_stage_failed(root: &str) -> bool {
     semantic_check_message(root).starts_with("error")
 }
+
+// ─── String FFI primitives ───────────────────────────────────────────
+// LANG-GAP: string primitives — these are FFI string operations used by .ax
+// code. They remain as sidecars until Axon has native string indexing. See
+// resolve.ax and semantics.ax for the semantic logic that calls these.
+// Note: equivalent helpers (string_char_at, string_byte_at, etc.) also exist
+// in discover.rs under non-axon-prefixed names.
 
 #[axon_export]
 fn axon_string_char_at(s: &str, index: i64) -> String {
