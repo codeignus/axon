@@ -10,4 +10,4 @@ name = "axon-native-build"
 path = "src/main.rs"
 
 [dependencies]
-axon-codegen = { path = "../../../../deprecioated-soon-compiler-do-not-rename/crates/axon-codegen" }
+axon-codegen = { path = "../../../../depreciating-soon-compiler-do-not-rename/crates/axon-codegen" }

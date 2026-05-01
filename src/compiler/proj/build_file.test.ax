@@ -6,7 +6,9 @@ import
         extract_version_field,
         manifest_has_rust_deps,
         manifest_has_go_deps,
-        manifest_has_python_deps
+        manifest_has_python_deps,
+        manifest_has_deps,
+        extract_deps_body
     }
 
 test build_extract_main_strip_double_quotes
@@ -32,3 +34,39 @@ test build_manifest_has_go_deps
 test build_manifest_has_python_deps
     m := "project demo\npython_deps\n    requests = \"2\"\nbin demo\n    main: ./src/main.ax"
     assert_eq(manifest_has_python_deps(m), true)
+
+test build_manifest_no_deps_keyword
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_deps(m), false)
+
+test build_manifest_has_deps_keyword
+    m := "project demo\ndeps\n    rust\n        tokio = \"1\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_deps(m), true)
+
+test build_extract_rust_deps_body
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\nrust_deps\n    tokio = \"1.0\"\n    serde = \"1.0\"\n"
+    body := extract_deps_body(m, "rust_deps")
+    assert_eq(string_contains(body, "tokio"), true)
+    assert_eq(string_contains(body, "serde"), true)
+
+test build_extract_go_deps_body
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\ngo_deps\n    rsc.io/quote = \"v1\"\n"
+    body := extract_deps_body(m, "go_deps")
+    assert_eq(string_contains(body, "rsc.io/quote"), true)
+
+test build_extract_deps_body_empty_when_missing
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    body := extract_deps_body(m, "rust_deps")
+    assert_eq(body, "")
+
+test build_hyphenated_project_name
+    m := "project lyla-backend\n    version: \"0.1.0\"\n\nbin lyla-backend\n    main: \"./src/main.ax\""
+    assert_eq(extract_project_name(m), "lyla-backend")
+    assert_eq(extract_binary_name(m), "lyla-backend")
+
+test build_hyphenated_project_with_rust_deps
+    m := "project lyla-backend\n    version: \"0.1.0\"\n\nbin lyla-backend\n    main: \"./src/main.ax\"\n\nrust_deps\n    tokio = \"1.0\"\n"
+    assert_eq(extract_project_name(m), "lyla-backend")
+    assert_eq(manifest_has_rust_deps(m), true)
+    body := extract_deps_body(m, "rust_deps")
+    assert_eq(string_contains(body, "tokio"), true)

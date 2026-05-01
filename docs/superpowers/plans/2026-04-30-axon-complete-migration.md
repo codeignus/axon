@@ -187,7 +187,8 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 **Tasks:**
 - [x] `build_file.ax`: `main:` / `version:` strip optional quotes; `manifest_has_rust_deps` heuristic; **`discover.rs` `discover_entry`** reads `main:` from `build.ax`; tests in `proj/build_file.test.ax`.
 - [x] **Incremental Phase 3:** **`manifest_has_go_deps`**, **`manifest_has_python_deps`** in **`build_file.ax`** + tests in **`build_file.test.ax`**. Remaining loader parity still open.
-- [ ] Port remainder: hyphenated naming edge cases, `deps`, full `rust_deps`/go_deps block bodies, parity with loader.
+- [x] **Incremental Phase 3b:** **`manifest_has_deps`**, **`extract_deps_body`** (indented body extraction for `rust_deps`/`go_deps`/`python_deps`/`deps` blocks); hyphenated project name edge cases; tests in **`build_file.test.ax`**.
+- [ ] Port remainder: full `deps` block body parsing, parity with loader.
 - [ ] Port module discovery: app files, colocated `*.test.ax`, integration `tests/**/*.ax`, sidecar association, import-path → module-path conversion.
 - [ ] Port check/test target scopes: project, file, module, tree `...`, invalid outside-project path errors.
 - [ ] Keep Rust only for directory listing, canonicalization, file reads, existence checks.

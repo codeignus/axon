@@ -358,7 +358,9 @@ impl<'a> Lexer<'a> {
                     let t = self.source.get(sb..eb.min(self.source.len())).unwrap_or("");
                     return Ok(tok("comment", t, sb, eb));
                 }
-                (Some(_), _) => self.advance(),
+                (Some(_), _) => {
+                    self.advance();
+                }
                 (None, _) => return Err(lex_err(self.source, sb, "unterminated block comment")),
             }
         }
@@ -700,7 +702,7 @@ impl<'a> Lexer<'a> {
 
             while !self.pending.is_empty() {
                 let follow = self.pending.remove(0);
-                let fk = tok_kind(&follow);
+                let fk = tok_kind(&follow).to_string();
                 out.push(follow);
                 if check_raw && (fk == "kw_rust" || fk == "kw_go") {
                     let content_sb = self.b_ci(self.pos);

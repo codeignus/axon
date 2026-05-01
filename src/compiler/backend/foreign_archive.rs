@@ -1,7 +1,6 @@
-//! Bridge crate generation and static archive builds for `@rust`/`.rs`/`rust_deps`.
-//!
-//! Thin sidecar only: parses no Axon semantics; callers in `.ax` own FFI policy inventory.
-#![forbid(unsafe_code)]
+// Bridge crate generation and static archive builds for `@rust`/`.rs`/`rust_deps`.
+//
+// Thin sidecar only: callers in `.ax` own FFI policy inventory.
 
 /// FFI: Produce a static archive for Rust sidecars. Placeholder returns error until ported.
 #[axon_pub_export]

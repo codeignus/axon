@@ -43,7 +43,11 @@ fn ensure_migration_driver_binary(root: &std::path::Path) -> Result<std::path::P
         .ok_or_else(|| "error: manifest path must be UTF-8".to_string())?;
     let target_dir = root.join("target/native-build-driver");
     let mut cargo = std::process::Command::new("cargo");
-    cargo.arg("+nightly");
+    // Use `+nightly` only when rustup is present; systems with a native nightly-ish
+    // toolchain (e.g. Rust ≥1.95) build edition-2024 without it.
+    if std::process::Command::new("rustup").arg("--version").output().is_ok() {
+        cargo.arg("+nightly");
+    }
     cargo.arg("build");
     cargo.arg("--manifest-path").arg(manifest_str);
     cargo.arg("-p").arg("axon-native-build");

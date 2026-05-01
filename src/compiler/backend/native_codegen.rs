@@ -1,8 +1,6 @@
-//! LLVM / object emission boundary for Axon-produced MIR payloads.
-//!
-//! Phase 8 of the migration replaces the temporary `axon-native-build` driver by calling
-//! into this crate from `.ax` over a narrow FFI (JSON MIR → object path bytes).
-#![forbid(unsafe_code)]
+// LLVM / object emission boundary for Axon-produced MIR payloads.
+//
+// Phase 8 replaces the temporary `axon-native-build` driver via FFI (JSON MIR → object path bytes).
 
 /// FFI: Serialized MIR/backend request placeholder. Real implementation emits one `.o`
 /// via inkwell/llvm-sys and returns `"ok:<path>` or `"error: ..."``.

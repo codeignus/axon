@@ -98,7 +98,11 @@ fn main() {
     }
 }
 
-/// Copy built binary into `target/build/axon/` for CLI `run`/preservation contracts.
+/// Copy built artifact into `target/build/<project>/<project>`.
+///
+/// Always stages to a temp file then renames onto `out_bin`.  The parent CLI process may
+/// still be the previous `target/build/axon/axon` image — opening that path with `copy`
+/// truncates/corrupts it.
 fn publish_to_axon_install_layout(workspace_root: &Path, native_artifact: &Path) -> Result<(), String> {
     let build_ax_path = workspace_root.join("build.ax");
     let project_name =
@@ -112,50 +116,38 @@ fn publish_to_axon_install_layout(workspace_root: &Path, native_artifact: &Path)
     })?;
     let out_bin = out_dir.join(&project_name);
 
-    let out_abs = std::fs::canonicalize(&out_dir).unwrap_or_else(|_| out_dir.clone());
-    let exe = std::env::current_exe().unwrap_or_default();
-    let exe_abs = std::fs::canonicalize(&exe).unwrap_or(exe);
-    let publishing_self = exe_abs.starts_with(&out_abs);
-
-    if publishing_self {
-        let tmp_path = out_dir.join(format!(
-            ".{}._stage_{}",
-            project_name,
-            std::process::id()
-        ));
-        std::fs::copy(native_artifact, &tmp_path).map_err(|e| {
-            format!(
-                "error: stage copy {} → {}: {e}",
-                native_artifact.display(),
-                tmp_path.display()
-            )
-        })?;
-        let new_path = out_dir.join(format!("{}.new", project_name));
-        std::fs::rename(&tmp_path, &new_path).map_err(|e| {
-            format!(
-                "error: rename staged artifact {} → {}: {e}",
-                tmp_path.display(),
-                new_path.display()
-            )
-        })?;
-    } else {
-        std::fs::copy(native_artifact, &out_bin).map_err(|e| {
-            format!(
-                "error: publish {} → {}: {e}",
-                native_artifact.display(),
-                out_bin.display()
-            )
-        })?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&out_bin, std::fs::Permissions::from_mode(0o755)).map_err(
-                |e| {
-                    format!("error: chmod {}: {e}", out_bin.display())
-                },
-            )?;
-        }
+    // Stage → chmod → atomic rename.  Never open `out_bin` for write (the running
+    // process image lives there and `copy` would truncate it to zero bytes).
+    let tmp_path = out_dir.join(format!(
+        ".{}.stage_{}_{}",
+        project_name,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_micros())
+            .unwrap_or(0)
+    ));
+    std::fs::copy(native_artifact, &tmp_path).map_err(|e| {
+        format!(
+            "error: stage artifact {} → {}: {e}",
+            native_artifact.display(),
+            tmp_path.display()
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o755)).map_err(
+            |e| format!("error: chmod staged {}: {e}", tmp_path.display()),
+        )?;
     }
+    std::fs::rename(&tmp_path, &out_bin).map_err(|e| {
+        format!(
+            "error: install {} → {}: {e}",
+            tmp_path.display(),
+            out_bin.display()
+        )
+    })?;
 
     // Fixed layout expected by tooling: `target/build/axon/axon`
     let compat_dir = workspace_root.join("target/build/axon");
@@ -166,23 +158,26 @@ fn publish_to_axon_install_layout(workspace_root: &Path, native_artifact: &Path)
         )
     })?;
     let compat_bin = compat_dir.join("axon");
-    let _ = std::fs::remove_file(&compat_bin);
-    let actual = native_artifact;
-    std::fs::copy(actual, &compat_bin).map_err(|e| {
-        format!(
-            "error: cannot publish compat {} ← {}: {e}",
-            compat_bin.display(),
-            actual.display()
-        )
-    })?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&compat_bin, std::fs::Permissions::from_mode(0o755)).map_err(
-            |e| {
-                format!("error: chmod compat {}: {e}", compat_bin.display())
-            },
-        )?;
+
+    // Only create the compat copy when it is a *different* path from out_bin
+    // (for project "axon" they are the same inode).
+    if compat_bin != out_bin {
+        let _ = std::fs::remove_file(&compat_bin);
+        std::fs::copy(&out_bin, &compat_bin).map_err(|e| {
+            format!(
+                "error: cannot publish compat {} ← {}: {e}",
+                compat_bin.display(),
+                out_bin.display()
+            )
+        })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&compat_bin, std::fs::Permissions::from_mode(0o755))
+                .map_err(|e| {
+                    format!("error: chmod compat {}: {e}", compat_bin.display())
+                })?;
+        }
     }
 
     Ok(())

@@ -33,6 +33,26 @@ pub func manifest_has_python_deps(manifest: String) bool
     total := axon_string_count(manifest, "\n") + 1
     return manifest_line_has_kw(manifest, total, 0, "python_deps")
 
+pub func manifest_has_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "deps")
+
+pub func extract_deps_body(manifest: String, keyword: String) String
+    total := axon_string_count(manifest, "\n") + 1
+    line_idx := find_manifest_line_idx(manifest, total, 0, keyword)
+    if line_idx < 0:
+        return ""
+    rest := skip_n_lines(manifest, line_idx + 1)
+    return collect_indented_body(rest, "")
+
+func find_manifest_line_idx(manifest: String, total: i64, idx: i64, kw: String) i64
+    if idx >= total:
+        return -1
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if line == kw:
+        return idx
+    return find_manifest_line_idx(manifest, total, idx + 1, kw)
+
 func manifest_line_has_kw(manifest: String, total: i64, idx: i64, kw: String) bool
     if idx >= total:
         return false
@@ -89,3 +109,38 @@ func find_first_nl(s: String, pos: i64) i64
     if axon_string_char_at(s, pos) == "\n":
         return pos
     return find_first_nl(s, pos + 1)
+
+func skip_n_lines(s: String, n: i64) String
+    if n <= 0:
+        return s
+    if axon_string_count(s, "") == 0:
+        return ""
+    pos := find_first_nl(s, 0)
+    if pos < 0:
+        return ""
+    rest := axon_string_sub(s, pos + 1, axon_string_count(s, "") - pos - 1)
+    return skip_n_lines(rest, n - 1)
+
+func collect_indented_body(text: String, acc: String) String
+    if axon_string_count(text, "") == 0:
+        return acc
+    line := get_manifest_line(text, 0)
+    trimmed := axon_string_trim(line)
+    if axon_string_count(trimmed, "") == 0:
+        rest := skip_n_lines(text, 1)
+        if axon_string_count(rest, "") == 0:
+            return acc
+        next_line := axon_string_trim(get_manifest_line(rest, 0))
+        if axon_string_count(next_line, "") == 0:
+            return acc
+        first := axon_string_char_at(next_line, 0)
+        if first == " " or first == "\t":
+            return collect_indented_body(rest, acc)
+        return acc
+    first := axon_string_char_at(line, 0)
+    if first != " " and first != "\t":
+        return acc
+    dep_line := trimmed
+    if axon_string_count(acc, "") == 0:
+        return collect_indented_body(skip_n_lines(text, 1), dep_line)
+    return collect_indented_body(skip_n_lines(text, 1), string_concat(string_concat(acc, "\n"), dep_line))
