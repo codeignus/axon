@@ -192,7 +192,7 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 - [ ] Port remainder: full `deps` block body parsing, parity with loader.
 - [x] **Incremental Phase 3c:** sidecar association (**`classify_file_pair`** in **`discover.ax`** — checks `.rs` beside `.ax`); import-path → file-path conversion (**`import_path_to_file_path`** — resolves `compiler/proj/build_file` to `src/compiler/proj/build_file.ax`, directory module, or not-found). Tests in **`loading.test.ax`**.
 - [x] **Incremental Phase 3d:** check/test target scopes now Axon-native in **`targets.ax`** (`axon_classify_check_target` / `axon_classify_test_target`) — no longer delegates to `targets.rs` sidecar. Covers project, dir, dir-recursive, file, and test:project scopes. Existing tests in **`targets.test.ax`** pass unchanged.
-- [ ] Port remaining loader edge cases (multi-bin targets, integration test isolation).
+- [x] **Incremental Phase 3e:** multi-bin target support (**`extract_all_bin_targets`**, **`scan_bin_main`**); integration test discovery (**`discover_integration_tests`**, **`discover_colocated_tests`**, **`discover_all_test_files`**).
 - [ ] Keep Rust only for directory listing, canonicalization, file reads, existence checks.
 
 **Verification:**
@@ -218,8 +218,8 @@ Expected: project/module errors and target-scope errors are produced by Axon-own
 - [x] **Incremental Phase 4:** **`semantics.rs`** `parse_import_bindings` now flags **duplicate braced import lines** for the same module path (same-line duplicate symbols were already caught). Full resolver parity still open.
 - [x] **Incremental Phase 4b:** **`resolve.ax`** `check_duplicate_braced_imports` detects cross-line duplicate symbols in braced imports using pure Axon; tests in **`check.test.ax`**. **`command_targets.ax`** `validate_test_file_path` enforces test file must be `src/**/*.test.ax` or `tests/**/*.ax`.
 - [x] **Incremental Phase 4c:** **`resolve.ax`** gains `check_duplicate_declarations_axon`, `check_self_import_axon`, `check_import_collision_axon`, `check_visibility_axon`, `build_symbol_table_axon`, `resolve_all_imports_axon` — all pure Axon, no `mut`/`while`. **`check.ax`** gains `run_full_semantic_check` chaining all checks. Tests in **`check.test.ax`** cover duplicate funcs/structs/enums/traits, self-import, import collision, visibility, symbol table, and full semantic chain.
-- [ ] Port remaining: struct/enum/trait member duplicates, method/associated `self` rules, alias namespace resolution.
-- [ ] Reduce `semantics.rs` to file iteration / string transport. No semantic decisions.
+- [x] **Incremental Phase 4d:** struct/enum/trait member duplicate detection, method self-rule checking, import alias conflict detection and resolution. **`semantics.rs`** reduced from ~810 to ~394 lines with LANG-GAP markers.
+- [ ] Reduce `semantics.rs` further to file iteration / string transport only (remaining LANG-GAP functions).
 
 **Verification:**
 ```bash
