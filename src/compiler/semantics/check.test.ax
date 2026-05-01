@@ -159,3 +159,148 @@ test full_semantic_check_catches_unresolved
 test full_semantic_check_empty_source
     got := run_full_semantic_check("")
     assert_eq(got, "ok:full-semantic:empty")
+
+// --- Phase 4 remaining: struct member duplicate tests ---
+
+test struct_duplicate_field_detected
+    source := "struct Point\n    x: i64\n    y: i64\n    x: String\n"
+    got := check_struct_member_duplicates(source)
+    assert_eq(string_contains(got, "duplicate struct field"), true)
+
+test struct_distinct_fields_pass
+    source := "struct Point\n    x: i64\n    y: i64\n    z: i64\n"
+    got := check_struct_member_duplicates(source)
+    assert_eq(got, "")
+
+test struct_empty_body_pass
+    source := "struct Empty\n"
+    got := check_struct_member_duplicates(source)
+    assert_eq(got, "")
+
+test struct_pub_decl_duplicate_detected
+    source := "pub struct Config\n    name: String\n    name: String\n"
+    got := check_struct_member_duplicates(source)
+    assert_eq(string_contains(got, "duplicate struct field"), true)
+
+test struct_multiple_structs_each_checked
+    source := "struct A\n    x: i64\n    y: i64\n\nstruct B\n    a: String\n    b: String\n"
+    got := check_struct_member_duplicates(source)
+    assert_eq(got, "")
+
+// --- Phase 4 remaining: enum variant duplicate tests ---
+
+test enum_duplicate_variant_detected
+    source := "enum Color\n    Red\n    Green\n    Red\n"
+    got := check_enum_variant_duplicates(source)
+    assert_eq(string_contains(got, "duplicate enum variant"), true)
+
+test enum_distinct_variants_pass
+    source := "enum Color\n    Red\n    Green\n    Blue\n"
+    got := check_enum_variant_duplicates(source)
+    assert_eq(got, "")
+
+test enum_empty_body_pass
+    source := "enum Empty\n"
+    got := check_enum_variant_duplicates(source)
+    assert_eq(got, "")
+
+test enum_pub_decl_duplicate_detected
+    source := "pub enum Status\n    Ok\n    Err\n    Ok\n"
+    got := check_enum_variant_duplicates(source)
+    assert_eq(string_contains(got, "duplicate enum variant"), true)
+
+test enum_variants_with_args_checked
+    source := "enum Expr\n    Num(i64)\n    Add(Expr, Expr)\n    Num(String)\n"
+    got := check_enum_variant_duplicates(source)
+    assert_eq(string_contains(got, "duplicate enum variant"), true)
+
+// --- Phase 4 remaining: trait method duplicate tests ---
+
+test trait_duplicate_method_detected
+    source := "trait Printable\n    fmt() String\n    show() String\n    fmt() String\n"
+    got := check_trait_method_duplicates(source)
+    assert_eq(string_contains(got, "duplicate trait method"), true)
+
+test trait_distinct_methods_pass
+    source := "trait Drawable\n    draw() void\n    resize(factor: i64) void\n"
+    got := check_trait_method_duplicates(source)
+    assert_eq(got, "")
+
+test trait_empty_body_pass
+    source := "trait Empty\n"
+    got := check_trait_method_duplicates(source)
+    assert_eq(got, "")
+
+test trait_pub_decl_duplicate_detected
+    source := "pub trait Comparable\n    compare(other: Self) i64\n    compare(other: Self) bool\n"
+    got := check_trait_method_duplicates(source)
+    assert_eq(string_contains(got, "duplicate trait method"), true)
+
+// --- Phase 4 remaining: method self-rule tests ---
+
+test impl_method_with_self_passes
+    source := "struct Point\n    x: i64\n\nimpl Point\n    get_x(self) i64\n        return self.x\n"
+    got := check_method_self_rules(source)
+    assert_eq(got, "")
+
+test impl_method_missing_self_flagged
+    source := "struct Point\n    x: i64\n\nimpl Point\n    get_x() i64\n        return 0\n"
+    got := check_method_self_rules(source)
+    assert_eq(string_contains(got, "must have 'self' as first parameter"), true)
+
+test impl_method_no_params_allowed
+    source := "struct Point\n    x: i64\n\nimpl Point\n    new() Point\n        return Point{x: 0}\n"
+    got := check_method_self_rules(source)
+    assert_eq(got, "")
+
+test impl_multiple_methods_all_valid
+    source := "struct Pair\n    a: i64\n    b: i64\n\nimpl Pair\n    first(self) i64\n        return self.a\n    second(self) i64\n        return self.b\n"
+    got := check_method_self_rules(source)
+    assert_eq(got, "")
+
+test impl_multiple_methods_one_bad
+    source := "struct Pair\n    a: i64\n\nimpl Pair\n    first(self) i64\n        return self.a\n    broken() i64\n        return 0\n"
+    got := check_method_self_rules(source)
+    assert_eq(string_contains(got, "must have 'self' as first parameter"), true)
+
+test method_self_rules_empty_source
+    got := check_method_self_rules("")
+    assert_eq(got, "")
+
+// --- Phase 4 remaining: import alias conflict tests ---
+
+test import_alias_conflict_detected
+    source := "import\n    compiler/a as foo\n    compiler/b as foo\n\nfunc main() void\n    return\n"
+    got := check_import_alias_conflicts(source)
+    assert_eq(string_contains(got, "duplicate import alias"), true)
+
+test import_distinct_aliases_pass
+    source := "import\n    compiler/a as fa\n    compiler/b as fb\n\nfunc main() void\n    return\n"
+    got := check_import_alias_conflicts(source)
+    assert_eq(got, "")
+
+test import_no_aliases_pass
+    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc main() void\n    return\n"
+    got := check_import_alias_conflicts(source)
+    assert_eq(got, "")
+
+test import_alias_conflicts_empty_source
+    got := check_import_alias_conflicts("")
+    assert_eq(got, "")
+
+// --- Phase 4 remaining: resolve_aliased_imports tests ---
+
+test resolve_aliased_imports_finds_aliases
+    source := "import\n    compiler/a as fa\n    compiler/b as fb\n\nfunc main() void\n    return\n"
+    got := resolve_aliased_imports(source)
+    assert_eq(string_contains(got, "fa=compiler/a"), true)
+    assert_eq(string_contains(got, "fb=compiler/b"), true)
+
+test resolve_aliased_imports_empty_when_no_aliases
+    source := "import\n    compiler/complex_types/string { string_len }\n\nfunc main() void\n    return\n"
+    got := resolve_aliased_imports(source)
+    assert_eq(got, "")
+
+test resolve_aliased_imports_empty_source
+    got := resolve_aliased_imports("")
+    assert_eq(got, "")

@@ -473,3 +473,295 @@ pub func resolve_all_imports_axon(source: String) String
     if string_len(errors) > 0:
         return errors
     return "ok:resolve"
+
+// --- Member duplicate detection ---
+
+func indent_level(line: String) i64
+    return count_leading_spaces(line, 0)
+
+func count_leading_spaces(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return pos
+    c := axon_string_char_at(s, pos)
+    if c == " ":
+        return count_leading_spaces(s, pos + 1)
+    return pos
+
+func is_at_indent(line: String, expected: i64) bool
+    return indent_level(line) == expected
+
+func extract_member_name(line: String) String
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) == 0:
+        return ""
+    // extract name before colon or open paren, or take whole ident
+    colon_pos := find_char(trimmed, ":")
+    paren_pos := find_char(trimmed, "(")
+    if colon_pos > 0 && (paren_pos < 0 || colon_pos < paren_pos):
+        return axon_string_trim(axon_string_sub(trimmed, 0, colon_pos))
+    if paren_pos > 0:
+        return axon_string_trim(axon_string_sub(trimmed, 0, paren_pos))
+    return take_ident_safe(trimmed)
+
+func is_struct_decl_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "struct ") || axon_string_starts_with(trimmed, "pub struct ")
+
+func is_enum_decl_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "enum ") || axon_string_starts_with(trimmed, "pub enum ")
+
+func is_trait_decl_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "trait ") || axon_string_starts_with(trimmed, "pub trait ")
+
+// --- struct member duplicate detection ---
+
+func scan_struct_members(source: String, idx: i64, total: i64, struct_start: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) > 0 && is_at_indent(line, 0) && idx > struct_start:
+        return errors
+    if string_len(trimmed) == 0:
+        return scan_struct_members(source, idx + 1, total, struct_start, seen, errors)
+    ind := indent_level(line)
+    if ind > 0 && idx > struct_start:
+        name := extract_member_name(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                new_err := "error: duplicate struct field '" + name + "'\n"
+                return scan_struct_members(source, idx + 1, total, struct_start, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_struct_members(source, idx + 1, total, struct_start, "|" + name + "|", errors)
+            return scan_struct_members(source, idx + 1, total, struct_start, seen + name + "|", errors)
+    return scan_struct_members(source, idx + 1, total, struct_start, seen, errors)
+
+func scan_for_struct_dupes(source: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_struct_decl_line(trimmed):
+        member_errs := scan_struct_members(source, idx + 1, total, idx, "|", "")
+        return scan_for_struct_dupes(source, idx + 1, total, errors + member_errs)
+    return scan_for_struct_dupes(source, idx + 1, total, errors)
+
+pub func check_struct_member_duplicates(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_for_struct_dupes(source, 0, count_lines(source), "")
+
+// --- enum variant duplicate detection ---
+
+func scan_enum_variants(source: String, idx: i64, total: i64, enum_start: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) > 0 && is_at_indent(line, 0) && idx > enum_start:
+        return errors
+    if string_len(trimmed) == 0:
+        return scan_enum_variants(source, idx + 1, total, enum_start, seen, errors)
+    ind := indent_level(line)
+    if ind > 0 && idx > enum_start:
+        name := extract_member_name(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                new_err := "error: duplicate enum variant '" + name + "'\n"
+                return scan_enum_variants(source, idx + 1, total, enum_start, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_enum_variants(source, idx + 1, total, enum_start, "|" + name + "|", errors)
+            return scan_enum_variants(source, idx + 1, total, enum_start, seen + name + "|", errors)
+    return scan_enum_variants(source, idx + 1, total, enum_start, seen, errors)
+
+func scan_for_enum_dupes(source: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_enum_decl_line(trimmed):
+        member_errs := scan_enum_variants(source, idx + 1, total, idx, "|", "")
+        return scan_for_enum_dupes(source, idx + 1, total, errors + member_errs)
+    return scan_for_enum_dupes(source, idx + 1, total, errors)
+
+pub func check_enum_variant_duplicates(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_for_enum_dupes(source, 0, count_lines(source), "")
+
+// --- trait method duplicate detection ---
+
+func scan_trait_methods(source: String, idx: i64, total: i64, trait_start: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) > 0 && is_at_indent(line, 0) && idx > trait_start:
+        return errors
+    if string_len(trimmed) == 0:
+        return scan_trait_methods(source, idx + 1, total, trait_start, seen, errors)
+    ind := indent_level(line)
+    if ind > 0 && idx > trait_start:
+        name := extract_member_name(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                new_err := "error: duplicate trait method '" + name + "'\n"
+                return scan_trait_methods(source, idx + 1, total, trait_start, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_trait_methods(source, idx + 1, total, trait_start, "|" + name + "|", errors)
+            return scan_trait_methods(source, idx + 1, total, trait_start, seen + name + "|", errors)
+    return scan_trait_methods(source, idx + 1, total, trait_start, seen, errors)
+
+func scan_for_trait_dupes(source: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_trait_decl_line(trimmed):
+        member_errs := scan_trait_methods(source, idx + 1, total, idx, "|", "")
+        return scan_for_trait_dupes(source, idx + 1, total, errors + member_errs)
+    return scan_for_trait_dupes(source, idx + 1, total, errors)
+
+pub func check_trait_method_duplicates(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_for_trait_dupes(source, 0, count_lines(source), "")
+
+// --- method self-rule checking ---
+
+func is_impl_block_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "impl ") || axon_string_starts_with(trimmed, "pub impl ")
+
+func find_close_paren_from(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return -1
+    if axon_string_char_at(s, pos) == ")":
+        return pos
+    return find_close_paren_from(s, pos + 1)
+
+func scan_to_comma_or_paren(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if c == "," || c == ")":
+        return ""
+    return c + scan_to_comma_or_paren(s, pos + 1)
+
+func extract_method_name_from_decl(line: String) String
+    if axon_string_starts_with(line, "func ") == false:
+        return ""
+    rest := axon_string_sub(line, 5, string_len(line) - 5)
+    return take_ident_safe(rest)
+
+func scan_impl_self_rules(source: String, idx: i64, total: i64, in_impl: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    ind := indent_level(line)
+    if is_impl_block_line(trimmed) && ind == 0:
+        return scan_impl_self_rules(source, idx + 1, total, idx, errors)
+    if in_impl >= 0 && ind == 0 && string_len(trimmed) > 0 && is_impl_block_line(trimmed) == false && is_at_indent(line, 0):
+        return scan_impl_self_rules(source, idx, total, -1, errors)
+    if in_impl >= 0 && ind > 0 && axon_string_starts_with(trimmed, "func "):
+        open := find_char(trimmed, "(")
+        if open >= 0:
+            close := find_close_paren_from(trimmed, open + 1)
+            if close >= 0:
+                params := axon_string_trim(axon_string_sub(trimmed, open + 1, close - open - 1))
+                if string_len(params) > 0:
+                    first := axon_string_trim(scan_to_comma_or_paren(params, 0))
+                    if axon_string_starts_with(first, "self") == false:
+                        mname := extract_method_name_from_decl(trimmed)
+                        new_err := "error: method '" + mname + "' in impl block must have 'self' as first parameter\n"
+                        return scan_impl_self_rules(source, idx + 1, total, in_impl, errors + new_err)
+    return scan_impl_self_rules(source, idx + 1, total, in_impl, errors)
+
+pub func check_method_self_rules(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_impl_self_rules(source, 0, count_lines(source), -1, "")
+
+// --- import alias conflict detection ---
+
+func split_ws_tokens(s: String, pos: i64, current: String, acc: String) String
+    if pos >= string_len(s):
+        if string_len(current) > 0:
+            if string_len(acc) == 0:
+                return current
+            return acc + "," + current
+        return acc
+    c := axon_string_char_at(s, pos)
+    if c == " " || c == "\t":
+        if string_len(current) > 0:
+            if string_len(acc) == 0:
+                return split_ws_tokens(s, pos + 1, "", current)
+            return split_ws_tokens(s, pos + 1, "", acc + "," + current)
+        return split_ws_tokens(s, pos + 1, "", acc)
+    return split_ws_tokens(s, pos + 1, current + c, acc)
+
+func count_pipe_entries(s: String, pos: i64) i64
+    return count_pipe_entries_rec(s, pos, 0)
+
+func count_pipe_entries_rec(s: String, pos: i64, count: i64) i64
+    if pos >= string_len(s):
+        return count + 1
+    if axon_string_char_at(s, pos) == "|":
+        return count_pipe_entries_rec(s, pos + 1, count + 1)
+    return count_pipe_entries_rec(s, pos + 1, count)
+
+func scan_import_alias_entries(source: String, idx: i64, total: i64, in_import: bool, acc: String) String
+    if idx >= total:
+        return acc
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if trimmed == "import":
+        return scan_import_alias_entries(source, idx + 1, total, true, acc)
+    if in_import == false:
+        return scan_import_alias_entries(source, idx + 1, total, false, acc)
+    if string_len(trimmed) == 0 || axon_string_starts_with(trimmed, "func ") || axon_string_starts_with(trimmed, "pub func ") || axon_string_starts_with(trimmed, "test "):
+        return scan_import_alias_entries(source, idx + 1, total, false, acc)
+    brace_idx := find_char(trimmed, "{")
+    if brace_idx >= 0:
+        return scan_import_alias_entries(source, idx + 1, total, true, acc)
+    parts := split_ws_tokens(trimmed, 0, "", "")
+    num := count_pipe_entries(parts, 0)
+    if num == 2:
+        alias := get_nth_csv(parts, 1)
+        mod_path := get_nth_csv(parts, 0)
+        entry := alias + "=" + mod_path
+        if string_len(acc) == 0:
+            return scan_import_alias_entries(source, idx + 1, total, true, entry)
+        return scan_import_alias_entries(source, idx + 1, total, true, acc + "|" + entry)
+    return scan_import_alias_entries(source, idx + 1, total, true, acc)
+
+func check_alias_dups(aliases: String, pos: i64, seen: String, errors: String) String
+    entry := get_nth_csv(aliases, pos)
+    if string_len(entry) == 0:
+        return errors
+    eq := find_char(entry, "=")
+    if eq >= 0:
+        alias := axon_string_sub(entry, 0, eq)
+        if string_len(alias) > 0:
+            if name_in_seen(seen, alias):
+                mod_path := axon_string_sub(entry, eq + 1, string_len(entry) - eq - 1)
+                new_err := "error: duplicate import alias '" + alias + "' (from " + mod_path + ")\n"
+                return check_alias_dups(aliases, pos + 1, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return check_alias_dups(aliases, pos + 1, "|" + alias + "|", errors)
+            return check_alias_dups(aliases, pos + 1, seen + alias + "|", errors)
+    return check_alias_dups(aliases, pos + 1, seen, errors)
+
+pub func check_import_alias_conflicts(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    aliases := scan_import_alias_entries(source, 0, count_lines(source), false, "")
+    if string_len(aliases) == 0:
+        return ""
+    return check_alias_dups(aliases, 0, "|", "")
+
+// --- resolve aliased imports ---
+
+pub func resolve_aliased_imports(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_import_alias_entries(source, 0, count_lines(source), false, "")
