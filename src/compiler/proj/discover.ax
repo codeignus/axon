@@ -165,7 +165,7 @@ pub func discover_all_test_files(root: String) String
     return string_concat(string_concat(colocated, "\n"), integration)
 
 pub func collect_app_files(root: String) String
-    return list_ax_files(string_concat(root, "/src"))
+    return list_all_ax_files(string_concat(root, "/src"))
 
 pub func collect_test_files(root: String) String
     return list_test_files(root)

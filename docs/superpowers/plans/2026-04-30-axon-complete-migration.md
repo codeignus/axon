@@ -197,7 +197,7 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 - [x] **Incremental Phase 3c:** sidecar association (**`classify_file_pair`** in **`discover.ax`** — checks `.rs` beside `.ax`); import-path → file-path conversion (**`import_path_to_file_path`** — resolves `compiler/proj/build_file` to `src/compiler/proj/build_file.ax`, directory module, or not-found). Tests in **`loading.test.ax`**.
 - [x] **Incremental Phase 3d:** check/test target scopes now Axon-native in **`targets.ax`** (`axon_classify_check_target` / `axon_classify_test_target`) — no longer delegates to `targets.rs` sidecar. Covers project, dir, dir-recursive, file, and test:project scopes. Existing tests in **`targets.test.ax`** pass unchanged.
 - [x] **Incremental Phase 3e:** multi-bin target support (**`extract_all_bin_targets`**, **`scan_bin_main`**); integration test discovery (**`discover_integration_tests`**, **`discover_colocated_tests`**, **`discover_all_test_files`**).
-- [ ] Keep Rust only for directory listing, canonicalization, file reads, existence checks.
+- [x] **`discover.rs`** remains FS-only (list/read/exists); **`collect_app_files`** uses **`list_all_ax_files`** so app sources exclude `.test.ax` consistently with **`collect_all_source_files`**.
 
 **Verification:**
 ```bash
@@ -274,10 +274,11 @@ This section is **not** a numbered migration phase; it records work that must la
 - [x] **Incremental:** **`lint.ax`** — `run_axon_lints` placeholder; **`run_full_semantic_check`** in **`check.ax`** invokes it after core semantic pass.
 - [x] **Incremental:** **`types.ax`** — string-encoded type helpers: **`type_name_is_option`**, **`type_name_is_result`**, **`type_strip_one_optional`** (+ tests in **`types.test.ax`**).
 - [x] **Incremental:** **`semantics.ax`** snippet checker — literal inference uses **`bool`** / **`i32`** / **`void`** for **`nil`** (aligned with **`types.ax`**); call arg checks use **`type_compatible`**; **`?T`** prefix stripped when parsing param types from decls.
+- [x] **Incremental:** **`typecheck.ax`** + **`pipeline_check.ax`** **`check_stage_typecheck`** — project-wide typecheck **stub** (`run_typecheck_project_stub`) wired after semantics until inference is Axon-owned.
 - [ ] Port the type model: primitives, integer widths/overflow, floats, bool, string, options/results, tuples, generics, traits, methods, associated funcs.
 - [ ] Port inference + unification + expected-type propagation.
 - [ ] Port operator typing rules and call/return checks.
-- [ ] Port lints/warnings: unused local, unreachable code after `return`/`break`/`continue`, suppression by code.
+- [x] **Incremental:** **`lint.ax`** — unreachable code after **`return`** on same function body (skips blank/`//`/nested decl starts); unused locals + suppression still open.
 - [ ] Remove all string-line heuristic type decisions.
 
 **Verification:**
@@ -300,11 +301,12 @@ Expected: every typecheck fixture (`tests/axon-frontend/fixtures/typecheck/**`, 
 - Test: `src/compiler/semantics/ownership.test.ax`, `src/compiler/ir/ir.test.ax`.
 
 **Tasks:**
+- [x] **Incremental:** **`ownership_summary.ax`** — stub **`build_ownership_summary_stub`**; **`ownership.ax`** **`validate_ownership_invariants`** invokes it before project walk.
 - [ ] Port canonical-owner selection, returned-local handling, returned-field-from-param/local handling, alias invalidation by mut reassignment / field mutation.
 - [ ] Port branch reconciliation across `if/elif/else` and `match` arms.
 - [ ] Tuple returns are path groups → no aggregate shell cleanup.
 - [ ] Aggregate shell cleanup frees only inline-owned fields and skips pointer-backed fields.
-- [ ] Emit ownership summaries used by MIR lowering & backend cleanup contract.
+- [ ] Emit real ownership summaries for MIR lowering (stub is a placeholder hook only).
 
 **Verification:**
 ```bash
@@ -327,10 +329,10 @@ Expected: ownership-related diagnostics and codegen requests are Axon-owned; bac
 - Test: `src/compiler/ir/ir.test.ax` covering literals, operators, calls, returns, bindings, assignments, control flow, ownership annotations, struct/enum constructors.
 
 **Tasks:**
-- [ ] Implement real MIR data model in Axon.
+- [ ] Implement real MIR data model in Axon (beyond constants/helpers in **`ir.ax`** / **`lower.ax`**).
 - [ ] Lower literals, identifiers, binary/unary ops, calls, returns, bindings, assignments, `if/elif/else`, `while`, `break`, `continue`, `match`, struct/enum constructors, tuple/list literals, options/results.
 - [ ] Emit owned locals, string-literal locals, aggregate field modes.
-- [ ] Replace `lower_project` so its output is a real backend request envelope, not `ok:lowered:<count>`.
+- [x] **Incremental:** **`ir.rs` `lower_project`** writes **`target/cache/lowered.ir`** with a **JSON v2 envelope** line (`{"v":2,"kind":"axon-mir-envelope",...}`) plus legacy `module` lines; return **`ok:lowered:v2:<n>`** (still accepted by **`backend.rs`** as **`ok:lowered:*`**). Per-module MIR bodies remain **`stub`** until lowering is ported from reference **`axon-mir`**.
 
 **Verification:**
 ```bash
@@ -355,6 +357,7 @@ Expected: `target/cache/lowered.ir` (or replacement) carries real MIR records; b
 - Test: backend behavior tests adjacent to backend modules, including link plan, artifact path policy, FFI validation, ownership-cleanup contract.
 
 **Tasks:**
+- [x] **Incremental:** **`backend/policy.ax`** — Axon-side policy strings (**`describe_native_codegen_boundary`**, **`describe_link_artifact_contract`**, **`assert_no_second_compiler_workspace`**) as scaffolding until policy moves out of **`axon-codegen`**.
 - [ ] Move policy decisions out of Rust: symbol naming, builtin lowering contract, type marshalling contract, ownership cleanup contract, artifact path policy, link plan policy, FFI inventory, foreign-archive plan.
 - [ ] Leave `native_codegen.rs` responsible for **only** LLVM IR construction + object emission for a single MIR module, given a JSON request from Axon.
 - [ ] Leave `foreign_archive.rs` responsible for **only** generating bridge sources and invoking `cargo`/`go`/`rustc` to build static archives from project sidecars (not the compiler).

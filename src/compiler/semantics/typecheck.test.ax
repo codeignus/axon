@@ -1,0 +1,8 @@
+import
+    compiler/semantics/typecheck { run_typecheck_project_stub }
+
+test typecheck_stub_default_ok
+    assert_eq(run_typecheck_project_stub(""), "ok:typecheck:stub:project")
+
+test typecheck_stub_nonempty_ok
+    assert_eq(run_typecheck_project_stub("src"), "ok:typecheck:stub")

@@ -1,0 +1,8 @@
+// Phase 5 bridge: project-wide typecheck will replace stub once inference lives in .ax.
+import
+    compiler/types/composites/string { string_len }
+
+pub func run_typecheck_project_stub(path: String) String
+    if string_len(axon_string_trim(path)) == 0:
+        return "ok:typecheck:stub:project"
+    return "ok:typecheck:stub"

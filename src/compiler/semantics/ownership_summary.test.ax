@@ -1,0 +1,5 @@
+import
+    compiler/semantics/ownership_summary { build_ownership_summary_stub }
+
+test ownership_summary_stub
+    assert_eq(build_ownership_summary_stub(""), "ok:ownership-summary:stub:project")

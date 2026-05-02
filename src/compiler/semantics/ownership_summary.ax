@@ -1,0 +1,8 @@
+// Phase 6 bridge: ownership summaries for MIR/codegen; replace with real CFG analysis in .ax.
+import
+    compiler/types/composites/string { string_len }
+
+pub func build_ownership_summary_stub(root: String) String
+    if string_len(axon_string_trim(root)) == 0:
+        return "ok:ownership-summary:stub:project"
+    return "ok:ownership-summary:stub"

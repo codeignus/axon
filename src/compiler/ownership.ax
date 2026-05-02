@@ -1,5 +1,6 @@
 import
     compiler/diagnostics/diagnostics { stage_should_abort }
+    compiler/semantics/ownership_summary { build_ownership_summary_stub }
 
 // Axon ownership model (language contract; enforcement in MIR + codegen).
 //
@@ -24,6 +25,9 @@ pub func validate_ownership_invariants() String
     lifecycle := validate_lifecycle_contract()
     if stage_should_abort(lifecycle):
         return lifecycle
+    summary := build_ownership_summary_stub("")
+    if stage_should_abort(summary):
+        return summary
     project := run_ownership_project_check("")
     if stage_should_abort(project):
         return project

@@ -8,3 +8,8 @@ test run_axon_lints_nonempty_source_ok
 test run_axon_lints_whitespace_only_empty
     got := run_axon_lints("   \n\t  ")
     assert_eq(got, "ok:lint:empty")
+
+test run_axon_lints_unreachable_after_return
+    bad := "func f() void\n    return\n    print(\"x\")\n"
+    got := run_axon_lints(bad)
+    assert_eq(axon_string_starts_with(got, "error:lint"), true)

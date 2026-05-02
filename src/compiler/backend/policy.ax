@@ -1,0 +1,9 @@
+// Phase 8 policy surface in Axon (orchestration stays in backend.rs until codegen is .ax-owned).
+pub func describe_native_codegen_boundary() String
+    return "policy:native-codegen:llvm-object-emission-only-via-sidecar"
+
+pub func describe_link_artifact_contract() String
+    return "policy:artifacts:target-build-layout-single-project"
+
+pub func assert_no_second_compiler_workspace() String
+    return "ok:policy:no-second-compiler-workspace"

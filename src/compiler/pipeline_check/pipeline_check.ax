@@ -6,6 +6,7 @@ import
     compiler/syntax/parser { run_parse_check, parse_stage_failed }
     compiler/semantics/check { run_semantic_project_check }
     compiler/semantics/semantics { semantic_stage_failed }
+    compiler/semantics/typecheck { run_typecheck_project_stub }
     compiler/ownership { ownership_stage_failed, run_ownership_project_check }
     compiler/proj { check_project_has_manifest, check_project_has_source_dir, check_main_entry_exists, discover_source_files }
 
@@ -58,6 +59,12 @@ pub func check_stage_semantics(path: String) String
         return diag_error("semantics", run_semantic_project_check(path))
     return "ok"
 
+pub func check_stage_typecheck(path: String) String
+    tc := run_typecheck_project_stub(path)
+    if stage_should_abort(tc):
+        return diag_error("typecheck", tc)
+    return "ok"
+
 pub func check_stage_ownership(root: String) String
     if ownership_stage_failed(root):
         return diag_error("ownership", run_ownership_project_check(root))
@@ -79,6 +86,9 @@ pub func run_check_for_path(path: String) String
     sm := check_stage_semantics(path)
     if stage_should_abort(sm):
         return sm
+    tc := check_stage_typecheck(path)
+    if stage_should_abort(tc):
+        return tc
     ow := check_stage_ownership("")
     if stage_should_abort(ow):
         return ow

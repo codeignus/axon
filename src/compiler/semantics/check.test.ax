@@ -170,6 +170,12 @@ test full_semantic_check_empty_source
     got := run_full_semantic_check("")
     assert_eq(got, "ok:full-semantic:empty")
 
+test full_semantic_check_catches_unreachable_after_return
+    source := "func main() void\n    return\n    print(\"x\")\n"
+    got := run_full_semantic_check(source)
+    assert_eq(message_is_error(got), "yes")
+    assert_eq(string_contains(got, "lint"), true)
+
 // --- Phase 4 remaining: struct member duplicate tests ---
 
 test struct_duplicate_field_detected
