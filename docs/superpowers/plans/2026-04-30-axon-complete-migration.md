@@ -15,6 +15,8 @@
 
 **Tech Stack:** Axon (`*.ax`), Rust sidecars (`*.rs`), shell verification scripts. LLVM 21 + nightly Rust are required while sidecars still own native codegen; this is a **build-time** dependency, not a separate compiler.
 
+**Bootstrap vs self-host:** Stage 0 uses `cargo run` from the reference workspace manifest to produce the first `target/build/axon/axon` (preserved as `axon_rustcompiled1`). Stages 1–3 run that binary’s `check`/`build` on this repo to produce `axon_selfcompiled{1,2,3}`. LLVM 21 may live under different prefixes per host; set `LLVM_SYS_211_PREFIX` or use `./scripts/verify-self-bootstrap.sh`, which probes `llvm-config-21`, `llvm-config` 21.x, and `/usr/lib/llvm/21` when unset. See **AGENTS.md** (section “Bootstrap → self-host chain”).
+
 ---
 
 ## Mindset & Migration Principles

@@ -36,6 +36,16 @@ While codegen/codegen-orchestration is still being ported, building the compiler
 - **`cargo +nightly`** (Rust 2024 edition is used by the migration driver until it’s replaced).
 - **LLVM 21** development libraries compatible with **`llvm-sys`/inkwell**. Set **`LLVM_SYS_211_PREFIX`** if `llvm-sys` cannot find it on its own.
 
+### Bootstrap → self-host chain (until the reference tree is gone)
+
+You may need **different LLVM layouts** on different hosts (Homebrew vs Debian `/usr/lib/llvm/21` vs Nix). The flow is always:
+
+1. **Stage 0 — reference workspace:** `cargo run` from the bootstrap manifest (`bootstrap-compiler/Cargo.toml` or **`depreciating-soon-compiler-do-not-rename/Cargo.toml`**) builds the first **`target/build/axon/axon`**. That binary is preserved as **`axon_rustcompiled1`**. This stage needs **LLVM 21** linked into the reference **`axon-codegen`** crate.
+2. **Stages 1–3 — repo-root Axon:** `axon_rustcompiled1 check "" && build` → **`axon_selfcompiled1`** → repeat → **`axon_selfcompiled2`**, **`axon_selfcompiled3`**. These runs use **`src/Cargo.toml`** (`axon-native-build` + same reference **`axon-codegen`** path) until Phase 8 removes the driver; **`backend.rs`** forwards **`LLVM_SYS_211_PREFIX`** (and related env) when building the driver.
+3. **End state (Phase 11+):** no reference checkout, no **`axon-codegen`** path dependency — only **`bootstrap-compiler`** or **`AXON_BOOTSTRAP_MANIFEST`** for the one-time bootstrap story, then fully self-contained **`axon build`**.
+
+`./scripts/verify-self-bootstrap.sh` runs stages 0–3 and auto-hints **`LLVM_SYS_211_PREFIX`** when **`llvm-config-21`**, **`llvm-config`** reporting 21.x, or **`/usr/lib/llvm/21`** exists. Override with an explicit **`export LLVM_SYS_211_PREFIX=…`** when your LLVM 21 lives elsewhere.
+
 Migration entry points already in this repo:
 
 - **`src/compiler/syntax/lexer.rs`** — **Phase 1 complete:** full lexer (indent/dedent, raw `@rust`/`@go`, f-strings, etc.) exposes **`axon_lex_token_stream`**; **`lexer.ax` `lex_all_tokens`** calls it so the Axon-visible token stream matches the check pipeline.

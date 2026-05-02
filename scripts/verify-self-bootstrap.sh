@@ -22,6 +22,29 @@ if [[ -z "${MANIFEST}" || ! -f "${MANIFEST}" ]]; then
   exit 1
 fi
 
+# Reference `axon-codegen` uses inkwell with LLVM 21. If `llvm-sys` cannot find it,
+# set LLVM_SYS_211_PREFIX explicitly (or install llvm-21-dev / matching Nix package).
+# When unset, probe common layouts so one machine can use distro LLVM 21 and
+# another can use a custom prefix without editing the script.
+if [[ -z "${LLVM_SYS_211_PREFIX:-}" ]]; then
+  if command -v llvm-config-21 >/dev/null 2>&1; then
+    export LLVM_SYS_211_PREFIX
+    LLVM_SYS_211_PREFIX="$(llvm-config-21 --prefix)"
+    echo "== hint: LLVM_SYS_211_PREFIX=$LLVM_SYS_211_PREFIX (from llvm-config-21) =="
+  elif command -v llvm-config >/dev/null 2>&1; then
+    _llvm_ver="$(llvm-config --version 2>/dev/null || true)"
+    if [[ "${_llvm_ver}" == 21.* ]]; then
+      export LLVM_SYS_211_PREFIX
+      LLVM_SYS_211_PREFIX="$(llvm-config --prefix)"
+      echo "== hint: LLVM_SYS_211_PREFIX=$LLVM_SYS_211_PREFIX (from llvm-config, version ${_llvm_ver}) =="
+    fi
+  fi
+  if [[ -z "${LLVM_SYS_211_PREFIX:-}" && -d /usr/lib/llvm/21 ]]; then
+    export LLVM_SYS_211_PREFIX=/usr/lib/llvm/21
+    echo "== hint: LLVM_SYS_211_PREFIX=$LLVM_SYS_211_PREFIX (default Linux path) =="
+  fi
+fi
+
 OUT_DIR="$ROOT/target/build/axon"
 BIN="$OUT_DIR/axon"
 
@@ -51,7 +74,12 @@ verify_binary() {
 }
 
 echo "== stage0: bootstrap (cargo) produces self compiler artifact =="
-cargo run --manifest-path "$MANIFEST" -p axon -- build
+if ! cargo run --manifest-path "$MANIFEST" -p axon -- build; then
+  echo "error: bootstrap build failed. If the failure mentions llvm-sys or LLVM," >&2
+  echo "  install LLVM 21 dev libraries and export LLVM_SYS_211_PREFIX to the install prefix" >&2
+  echo "  (e.g. export LLVM_SYS_211_PREFIX=\$(llvm-config-21 --prefix))." >&2
+  exit 1
+fi
 
 if [[ ! -x "$BIN" ]]; then
   echo "error: expected executable at $BIN after bootstrap build" >&2
