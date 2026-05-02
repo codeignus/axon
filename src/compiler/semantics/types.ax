@@ -75,6 +75,21 @@ pub func type_infer_literal(text: String) String
         return "void"
     return "i32"
 
+pub func type_name_is_option(ty: String) bool
+    t := axon_string_trim(ty)
+    return axon_string_starts_with(t, "Option<")
+
+pub func type_name_is_result(ty: String) bool
+    t := axon_string_trim(ty)
+    return axon_string_starts_with(t, "Result<")
+
+pub func type_strip_one_optional(ty: String) String
+    t := axon_string_trim(ty)
+    if axon_string_starts_with(t, "?"):
+        rest := axon_string_sub(t, 1, string_len(t) - 1)
+        return axon_string_trim(rest)
+    return t
+
 pub func type_infer_binary_op(op: String, left_type: String, right_type: String) String
     if left_type == "Unknown" or right_type == "Unknown":
         return "Unknown"

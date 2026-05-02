@@ -128,3 +128,27 @@ test type_error_format
 test type_mismatch_error_format
     result := type_mismatch_error("i32", "String", "assignment")
     assert_eq(message_is_error(result), "yes")
+
+test type_name_is_option_true
+    assert_eq(type_name_is_option("Option<i32>"), true)
+
+test type_name_is_option_trimmed
+    assert_eq(type_name_is_option("  Option<String>  "), true)
+
+test type_name_is_option_false_plain
+    assert_eq(type_name_is_option("i32"), false)
+
+test type_name_is_result_true
+    assert_eq(type_name_is_result("Result<String, i32>"), true)
+
+test type_name_is_result_false_option
+    assert_eq(type_name_is_result("Option<i32>"), false)
+
+test type_strip_one_optional_removes_one
+    assert_eq(type_strip_one_optional("?i32"), "i32")
+
+test type_strip_one_optional_trim_and_no_sigil
+    assert_eq(type_strip_one_optional("  String  "), "String")
+
+test type_strip_one_optional_only_first
+    assert_eq(type_strip_one_optional("??bool"), "?bool")
