@@ -1,8 +1,38 @@
-// Phase 5 bridge: project-wide typecheck will replace stub once inference lives in .ax.
+// Phase 5: project-wide typecheck — runs full Axon semantic chain per app source file.
 import
     compiler/types/composites/string { string_len }
+    compiler/proj/discover {
+        discover_project_root,
+        list_all_ax_files,
+        get_line_at,
+        read_source_file,
+        string_concat,
+    }
+    compiler/semantics/check { run_full_semantic_check }
 
-pub func run_typecheck_project_stub(path: String) String
-    if string_len(axon_string_trim(path)) == 0:
-        return "ok:typecheck:stub:project"
-    return "ok:typecheck:stub"
+pub func run_typecheck_project_path(path: String) String
+    root := axon_string_trim(path)
+    if string_len(root) == 0:
+        root = discover_project_root()
+    src := string_concat(root, "/src")
+    files := list_all_ax_files(src)
+    if axon_string_starts_with(files, "error:"):
+        return files
+    total := axon_string_count(files, "\n") + 1
+    if string_len(axon_string_trim(files)) == 0:
+        return "ok:typecheck:project:0-files"
+    return typecheck_scan_files(files, total, 0)
+
+func typecheck_scan_files(files: String, total: i64, idx: i64) String
+    if idx >= total:
+        return "ok:typecheck:project"
+    rel := axon_string_trim(get_line_at(files, idx))
+    if string_len(rel) == 0:
+        return typecheck_scan_files(files, total, idx + 1)
+    content := read_source_file(rel)
+    if axon_string_starts_with(content, "error:"):
+        return string_concat(string_concat("error:typecheck:cannot-read ", rel), "")
+    full := run_full_semantic_check(content)
+    if axon_string_starts_with(full, "error"):
+        return string_concat(string_concat(string_concat(full, " in "), rel), "")
+    return typecheck_scan_files(files, total, idx + 1)

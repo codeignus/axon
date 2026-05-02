@@ -1,6 +1,18 @@
 import
     compiler/types/composites/string { string_len, string_contains }
 
+func resolve_count_lines(source: String) i64
+    if string_len(source) == 0:
+        return 0
+    return resolve_count_lines_rec(source, 0, 1)
+
+func resolve_count_lines_rec(source: String, pos: i64, count: i64) i64
+    if pos >= string_len(source):
+        return count
+    if axon_string_char_at(source, pos) == "\n":
+        return resolve_count_lines_rec(source, pos + 1, count + 1)
+    return resolve_count_lines_rec(source, pos + 1, count)
+
 func scan_import_lines(source: String, idx: i64, total: i64, in_import: bool, errors: String) String
     if idx >= total:
         return errors
@@ -70,7 +82,7 @@ pub func check_duplicate_names(source: String) String
 pub func check_imports(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return "ok:semantic-snippet:empty"
-    errors := scan_import_lines(source, 0, count_lines(source), false, "")
+    errors := scan_import_lines(source, 0, resolve_count_lines(source), false, "")
     if string_len(errors) > 0:
         return errors
     return axon_semantic_check(source)
@@ -79,13 +91,13 @@ pub func check_duplicate_declarations(source: String) String
     return axon_semantic_check(source)
 
 pub func resolve_import_names(source: String) String
-    return collect_import_symbols(source, 0, count_lines(source), false, "")
+    return collect_import_symbols(source, 0, resolve_count_lines(source), false, "")
 
 pub func resolve_symbol_arity(source: String) String
-    return scan_arity_entries(source, 0, count_lines(source), "")
+    return scan_arity_entries(source, 0, resolve_count_lines(source), "")
 
 pub func check_duplicate_braced_imports(source: String) String
-    symbols := collect_import_symbols(source, 0, count_lines(source), false, "")
+    symbols := collect_import_symbols(source, 0, resolve_count_lines(source), false, "")
     return check_sym_list_for_dups(symbols, 0, "", "")
 
 func check_sym_list_for_dups(symbols: String, pos: i64, seen: String, errors: String) String
@@ -426,25 +438,25 @@ func check_inline_dup_symbols(symbols: String, pos: i64, seen: String, errors: S
 pub func check_duplicate_declarations_axon(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_duplicate_decls(source, 0, count_lines(source), "|", "")
+    return scan_duplicate_decls(source, 0, resolve_count_lines(source), "|", "")
 
 pub func check_self_import_axon(source: String, current_module: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_self_import(source, 0, count_lines(source), false, current_module, "")
+    return scan_self_import(source, 0, resolve_count_lines(source), false, current_module, "")
 
 pub func check_import_collision_axon(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    imported := collect_import_symbols(source, 0, count_lines(source), false, "")
-    local_decls := collect_local_decl_names(source, 0, count_lines(source), "|")
+    imported := collect_import_symbols(source, 0, resolve_count_lines(source), false, "")
+    local_decls := collect_local_decl_names(source, 0, resolve_count_lines(source), "|")
     return check_collision_of_symbols(imported, local_decls, "")
 
 pub func check_visibility_axon(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
     table := build_symbol_table_axon(source)
-    num_lines := count_lines(source)
+    num_lines := resolve_count_lines(source)
     return scan_vis_lines(source, table, 0, num_lines, "")
 
 func scan_vis_lines(source: String, table: String, idx: i64, total: i64, errors: String) String
@@ -464,12 +476,12 @@ func scan_vis_lines(source: String, table: String, idx: i64, total: i64, errors:
 pub func build_symbol_table_axon(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_symbol_entry(source, 0, count_lines(source), "")
+    return scan_symbol_entry(source, 0, resolve_count_lines(source), "")
 
 pub func resolve_all_imports_axon(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return "ok:resolve:empty"
-    errors := scan_import_resolution(source, 0, count_lines(source), false, "")
+    errors := scan_import_resolution(source, 0, resolve_count_lines(source), false, "")
     if string_len(errors) > 0:
         return errors
     return "ok:resolve"
@@ -548,7 +560,7 @@ func scan_for_struct_dupes(source: String, idx: i64, total: i64, errors: String)
 pub func check_struct_member_duplicates(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_for_struct_dupes(source, 0, count_lines(source), "")
+    return scan_for_struct_dupes(source, 0, resolve_count_lines(source), "")
 
 // --- enum variant duplicate detection ---
 
@@ -586,7 +598,7 @@ func scan_for_enum_dupes(source: String, idx: i64, total: i64, errors: String) S
 pub func check_enum_variant_duplicates(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_for_enum_dupes(source, 0, count_lines(source), "")
+    return scan_for_enum_dupes(source, 0, resolve_count_lines(source), "")
 
 // --- trait method duplicate detection ---
 
@@ -624,7 +636,7 @@ func scan_for_trait_dupes(source: String, idx: i64, total: i64, errors: String) 
 pub func check_trait_method_duplicates(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_for_trait_dupes(source, 0, count_lines(source), "")
+    return scan_for_trait_dupes(source, 0, resolve_count_lines(source), "")
 
 // --- method self-rule checking ---
 
@@ -679,7 +691,7 @@ func scan_impl_self_rules(source: String, idx: i64, total: i64, in_impl: i64, er
 pub func check_method_self_rules(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_impl_self_rules(source, 0, count_lines(source), -1, "")
+    return scan_impl_self_rules(source, 0, resolve_count_lines(source), -1, "")
 
 // --- import alias conflict detection ---
 
@@ -754,7 +766,7 @@ func check_alias_dups(aliases: String, pos: i64, seen: String, errors: String) S
 pub func check_import_alias_conflicts(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    aliases := scan_import_alias_entries(source, 0, count_lines(source), false, "")
+    aliases := scan_import_alias_entries(source, 0, resolve_count_lines(source), false, "")
     if string_len(aliases) == 0:
         return ""
     return check_alias_dups(aliases, 0, "|", "")
@@ -764,7 +776,7 @@ pub func check_import_alias_conflicts(source: String) String
 pub func resolve_aliased_imports(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return ""
-    return scan_import_alias_entries(source, 0, count_lines(source), false, "")
+    return scan_import_alias_entries(source, 0, resolve_count_lines(source), false, "")
 
 // --- type sigil helpers: ?T, T!, ?T! ---
 

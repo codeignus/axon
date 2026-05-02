@@ -271,10 +271,10 @@ This section is **not** a numbered migration phase; it records work that must la
 
 **Tasks:**
 - [ ] Optional stub (deferred from type-refinement scope): **`check_match_exhaustiveness_axon`** in **`check.ax`** + resolver hooks when the Axon typechecker owns match typing; not required to start porting primitives.
-- [x] **Incremental:** **`lint.ax`** — `run_axon_lints` placeholder; **`run_full_semantic_check`** in **`check.ax`** invokes it after core semantic pass.
+- [x] **Incremental:** **`lint.ax`** + **`run_full_semantic_check`** — lint runs after core semantic pass (unreachable-after-**`return`** + placeholder path for more rules).
 - [x] **Incremental:** **`types.ax`** — string-encoded type helpers: **`type_name_is_option`**, **`type_name_is_result`**, **`type_strip_one_optional`** (+ tests in **`types.test.ax`**).
 - [x] **Incremental:** **`semantics.ax`** snippet checker — literal inference uses **`bool`** / **`i32`** / **`void`** for **`nil`** (aligned with **`types.ax`**); call arg checks use **`type_compatible`**; **`?T`** prefix stripped when parsing param types from decls.
-- [x] **Incremental:** **`typecheck.ax`** + **`pipeline_check.ax`** **`check_stage_typecheck`** — project-wide typecheck **stub** (`run_typecheck_project_stub`) wired after semantics until inference is Axon-owned.
+- [x] **`typecheck.ax`** + **`pipeline_check.ax`** **`check_stage_typecheck`** — **`run_typecheck_project_path`** walks **`list_all_ax_files(<root>/src)`** and runs **`run_full_semantic_check`** per app file (same Axon chain as snippet tests). Deeper inference/unification still ports from reference **`axon-typecheck`**.
 - [ ] Port the type model: primitives, integer widths/overflow, floats, bool, string, options/results, tuples, generics, traits, methods, associated funcs.
 - [ ] Port inference + unification + expected-type propagation.
 - [ ] Port operator typing rules and call/return checks.
@@ -301,7 +301,7 @@ Expected: every typecheck fixture (`tests/axon-frontend/fixtures/typecheck/**`, 
 - Test: `src/compiler/semantics/ownership.test.ax`, `src/compiler/ir/ir.test.ax`.
 
 **Tasks:**
-- [x] **Incremental:** **`ownership_summary.ax`** — stub **`build_ownership_summary_stub`**; **`ownership.ax`** **`validate_ownership_invariants`** invokes it before project walk.
+- [x] **`ownership_summary.ax`** — **`build_ownership_summary_stub`** returns **`ok:ownership-summary:app-files=<n>`** from **`list_all_ax_files(<root>/src)`**; **`ownership.ax`** passes **`discover_project_root()`**.
 - [ ] Port canonical-owner selection, returned-local handling, returned-field-from-param/local handling, alias invalidation by mut reassignment / field mutation.
 - [ ] Port branch reconciliation across `if/elif/else` and `match` arms.
 - [ ] Tuple returns are path groups → no aggregate shell cleanup.

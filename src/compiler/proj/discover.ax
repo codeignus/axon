@@ -48,7 +48,7 @@ func extract_module_list(files: String, total: i64, idx: i64, acc: String) Strin
         return extract_module_list(files, total, idx + 1, mod_path)
     return extract_module_list(files, total, idx + 1, string_concat(string_concat(acc, ","), mod_path))
 
-func get_line_at(s: String, idx: i64) String
+pub func get_line_at(s: String, idx: i64) String
     if idx == 0:
         nl := find_nl(s, 0)
         if nl < 0:
