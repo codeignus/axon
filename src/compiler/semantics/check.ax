@@ -1,6 +1,7 @@
 import
     compiler/types/composites/string { string_len }
     compiler/semantics/lint { run_axon_lints }
+    compiler/semantics/resolve { check_match_exhaustiveness_axon }
 
 pub func run_semantic_check_for_source(source: String) String
     return axon_semantic_check(source)
@@ -46,6 +47,11 @@ pub func run_full_semantic_check(source: String) String
     core_err := axon_semantic_check(source)
     if axon_string_starts_with(core_err, "error"):
         return core_err
+
+    // 5b. Match exhaustiveness (stub until typechecker owns match typing)
+    match_err := check_match_exhaustiveness_axon(source)
+    if string_len(match_err) > 0:
+        return match_err
 
     // 6. Axon-owned lints (placeholder; expands in Phase 5)
     lint_err := run_axon_lints(source)

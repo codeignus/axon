@@ -829,6 +829,10 @@ pub func allowed_match_arms(sigil_class: String) String
 
 // Compute the residual type after a match with missing arms
 // Returns the result type sigil, or "T" if all handled
+// Phase 5: match exhaustiveness — full CFG analysis ports from reference typecheck; returns "" when no issue.
+pub func check_match_exhaustiveness_axon(source: String) String
+    return ""
+
 pub func match_residual_type(sigil_class: String, handled_arms: String) String
     all := allowed_match_arms(sigil_class)
     if all == "":

@@ -1,0 +1,109 @@
+// Phase 6: project-wide ownership policy — Axon-owned scan (same rules as former ownership.rs walk).
+import
+    compiler/types/composites/string { string_len }
+    compiler/syntax/token { i64_to_string }
+    compiler/proj/discover {
+        discover_project_root,
+        list_all_ax_files,
+        get_line_at,
+        read_source_file,
+        string_concat,
+    }
+
+pub func run_ownership_project_check_axon(root: String) String
+    r := axon_string_trim(root)
+    if string_len(r) == 0:
+        r = discover_project_root()
+    src := string_concat(r, "/src")
+    files := list_all_ax_files(src)
+    if axon_string_starts_with(files, "error:"):
+        return files
+    total := axon_string_count(files, "\n") + 1
+    if string_len(axon_string_trim(files)) == 0:
+        return "ok:ownership:0"
+    return ownership_scan_files(files, total, 0, 0)
+
+func ownership_scan_files(files: String, total: i64, idx: i64, checked: i64) String
+    if idx >= total:
+        return string_concat("ok:ownership:", i64_to_string(checked))
+    rel := axon_string_trim(get_line_at(files, idx))
+    if string_len(rel) == 0:
+        return ownership_scan_files(files, total, idx + 1, checked)
+    content := read_source_file(rel)
+    if axon_string_starts_with(content, "error:"):
+        return string_concat(string_concat("error:ownership:cannot-read ", rel), "")
+    err := check_source_ownership_policy(content, rel)
+    if string_len(err) > 0:
+        return err
+    return ownership_scan_files(files, total, idx + 1, checked + 1)
+
+func is_ownership_doc_exception_path(rel: String) bool
+    return axon_string_contains(rel, "compiler/ownership.ax")
+
+func check_source_ownership_policy(source: String, rel_path: String) String
+    return ownership_policy_scan_lines(source, rel_path, 0, resolve_count_lines_ownership(source))
+
+func resolve_count_lines_ownership(source: String) i64
+    if string_len(source) == 0:
+        return 0
+    return resolve_count_lines_ownership_rec(source, 0, 1)
+
+func resolve_count_lines_ownership_rec(source: String, pos: i64, count: i64) i64
+    if pos >= string_len(source):
+        return count
+    if axon_string_char_at(source, pos) == "\n":
+        return resolve_count_lines_ownership_rec(source, pos + 1, count + 1)
+    return resolve_count_lines_ownership_rec(source, pos + 1, count)
+
+func ownership_policy_line_err(rel_path: String, line_one_based: i64, msg: String) String
+    a := string_concat(msg, " at ")
+    b := string_concat(a, rel_path)
+    c := string_concat(b, ":")
+    return string_concat(c, i64_to_string(line_one_based))
+
+func check_source_ownership_policy_line(trimmed: String, rel_path: String, line_one_based: i64) String
+    exc := is_ownership_doc_exception_path(rel_path)
+    if exc == false && axon_string_contains(trimmed, "condition_scope_consume("):
+        return ownership_policy_line_err(rel_path, line_one_based, "error: manual condition consume is forbidden")
+    if exc == false && axon_string_contains(trimmed, "condition_scope_begin("):
+        return ownership_policy_line_err(rel_path, line_one_based, "error: manual condition scope begin is forbidden")
+    if axon_string_contains(trimmed, "dealloc("):
+        return ownership_policy_line_err(rel_path, line_one_based, "error: manual deallocation is forbidden")
+    if axon_string_contains(trimmed, "free("):
+        return ownership_policy_line_err(rel_path, line_one_based, "error: manual deallocation is forbidden")
+    return ""
+
+func ownership_policy_scan_lines(source: String, rel_path: String, idx: i64, total: i64) String
+    if idx >= total:
+        return ""
+    line := axon_string_trim(ownership_get_line(source, idx))
+    err := check_source_ownership_policy_line(line, rel_path, idx + 1)
+    if string_len(err) > 0:
+        return err
+    return ownership_policy_scan_lines(source, rel_path, idx + 1, total)
+
+func ownership_get_line(source: String, line_num: i64) String
+    return ownership_get_line_rec(source, line_num, 0, 0)
+
+func ownership_get_line_rec(source: String, line_num: i64, current: i64, start: i64) String
+    return ownership_get_line_scan(source, line_num, current, start, start)
+
+func ownership_get_line_scan(source: String, line_num: i64, current: i64, start: i64, pos: i64) String
+    if pos >= string_len(source):
+        if current == line_num:
+            return axon_string_sub(source, start, string_len(source) - start)
+        return ""
+    c := axon_string_char_at(source, pos)
+    if current == line_num:
+        if c == "\n":
+            return axon_string_sub(source, start, pos - start)
+        return ownership_get_line_scan(source, line_num, current, start, pos + 1)
+    if c == "\n":
+        return ownership_get_line_scan(source, line_num, current + 1, pos + 1, pos + 1)
+    return ownership_get_line_scan(source, line_num, current, start, pos + 1)
+
+pub func describe_ownership_branch_contract_axon() String
+    return "ownership:branches-exclusive:if-elif-else-one-path;mut-slot-updates-per-path-not-double-free"
+
+pub func describe_ownership_cleanup_contract_axon() String
+    return "ownership:cleanup:aggregate-shell-inline-fields-only;pointer-backed-skipped-in-codegen"

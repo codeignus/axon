@@ -7,7 +7,7 @@ import
     compiler/semantics/check { run_semantic_project_check }
     compiler/semantics/semantics { semantic_stage_failed }
     compiler/semantics/typecheck { run_typecheck_project_path }
-    compiler/ownership { ownership_stage_failed, run_ownership_project_check }
+    compiler/semantics/ownership_project { run_ownership_project_check_axon }
     compiler/proj { check_project_has_manifest, check_project_has_source_dir, check_main_entry_exists, discover_source_files }
 
 pub func validate_project_structure(root: String) String
@@ -66,8 +66,9 @@ pub func check_stage_typecheck(path: String) String
     return "ok"
 
 pub func check_stage_ownership(root: String) String
-    if ownership_stage_failed(root):
-        return diag_error("ownership", run_ownership_project_check(root))
+    msg := run_ownership_project_check_axon(root)
+    if axon_string_starts_with(msg, "error"):
+        return diag_error("ownership", msg)
     return "ok"
 
 pub func run_check_for_path(path: String) String

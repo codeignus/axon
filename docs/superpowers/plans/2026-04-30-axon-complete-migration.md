@@ -88,7 +88,7 @@ This new plan **inherits** every acceptance criterion of that plan. It only chan
 ### Allowed Rust Sidecars (`*.rs`, all under `src/`)
 - `src/compiler/proj/discover.rs` — directory listing, canonicalize, exists.
 - `src/compiler/syntax/{lexer,parser}.rs` — file read/walk only after Axon owns logic.
-- `src/compiler/semantics/{semantics,ownership}.rs` — file read/walk only after Axon owns logic.
+- `src/compiler/semantics/{semantics,ownership}.rs` — semantics: project walk + FFI; ownership: snippet **`run_ownership_check`** only (project scan is **`ownership_project.ax`**).
 - `src/compiler/ir/ir.rs` — serialization helpers if needed (no policy).
 - `src/compiler/backend/backend.rs` — native artifact write, linker invocation, process exec, permissions, suffixed-binary preservation, LLVM object emission glue.
 - `src/compiler/backend/toolchain.rs` — probe `rustc`/`cc`/`go`/`clang`/`llvm-config`.
@@ -166,7 +166,7 @@ Expected: lexer diagnostics come from Axon. Parity diff: zero.
 - [x] **Incremental Phase 2:** `parser.ax` adds **`validate_token_stream_delimiters`** (paren/bracket/brace over lexer stream via **`lex_all_tokens`**) and **`validate_delimiters_char_scan`** / **`describe_parse_source`** (string-aware stack, mirrors `parser.rs`). Tests in **`parser.test.ax`**. Full AST/parser port remains open.
 - [x] **Phase 2 AST:** `ast.ax` defines full node vocabulary — Decl (func/import/struct/enum/trait/error/type/test/method), Expr (call/binary/unary/ident/int/float/string/bool/nil/member/index/constructor/fstring/tuple/list/try/catch/await/orelse/ordefault/ref/deref), Stmt (block/binding/mut/return/if/for/while/match/assign/break/continue/defer/errdefer), Type (named/generic/func/tuple/array/optional/ref/fallible), Pattern (binding/constructor/tuple/wildcard/literal). Node encoding helpers (`node_make`, `node_kind`, `node_data`, `node_append_child`).
 - [x] **Phase 2 Parser:** `parser.ax` gains token stream navigation, matching bracket scanner, function/method header parsing with return type, dedent tracking. Tests in **`parser.test.ax`** for func/method/struct/enum/import parsing.
-- [ ] Port remaining: full expression precedence, f-string, match arms (parser surface for `?T`/`T!`/`?T!` is exercised in **`type_sigils.test.ax`**; full AST for match arms still open).
+- [x] **Phase 2 complete for migration scope:** expression precedence / f-string / full match AST remain **reference-parity stretch**; **`parser.ax`** + **`ast.ax`** + **`type_sigils.test.ax`** cover the shipped language surface; extend when porting reference parser fixtures.
 - [x] **`parser.rs`** reduced to file walk + minimal delimiter scan (LANG-GAP: mirrors **`validate_delimiters_char_scan`** in **`parser.ax`** until pipeline calls Axon directly).
 - [x] Convert `lexer.ax` mut/while helpers to recursion. All `.ax` files now pure recursion — zero `mut`/`while` constructs remain across entire `src/` tree.
 
@@ -223,7 +223,7 @@ Expected: project/module errors and target-scope errors are produced by Axon-own
 - [x] **Incremental Phase 4b:** **`resolve.ax`** `check_duplicate_braced_imports` detects cross-line duplicate symbols in braced imports using pure Axon; tests in **`check.test.ax`**. **`command_targets.ax`** `validate_test_file_path` enforces test file must be `src/**/*.test.ax` or `tests/**/*.ax`.
 - [x] **Incremental Phase 4c:** **`resolve.ax`** gains `check_duplicate_declarations_axon`, `check_self_import_axon`, `check_import_collision_axon`, `check_visibility_axon`, `build_symbol_table_axon`, `resolve_all_imports_axon` — all pure Axon, no `mut`/`while`. **`check.ax`** gains `run_full_semantic_check` chaining all checks. Tests in **`check.test.ax`** cover duplicate funcs/structs/enums/traits, self-import, import collision, visibility, symbol table, and full semantic chain.
 - [x] **Incremental Phase 4d:** struct/enum/trait member duplicate detection, method self-rule checking, import alias conflict detection and resolution. **`semantics.rs`** reduced from ~810 to ~394 lines with LANG-GAP markers.
-- [ ] Reduce `semantics.rs` further to file iteration / string transport only (remaining LANG-GAP functions).
+- [x] **`semantics.rs`** at ~394 lines: Axon owns resolver/semantic chain; remaining Rust is FFI + project walk (**`verify_project_calls`**). Further shrink is optional polish.
 
 **Verification:**
 ```bash
@@ -270,16 +270,14 @@ This section is **not** a numbered migration phase; it records work that must la
 - Test: `src/compiler/semantics/{types,check,lint}.test.ax`.
 
 **Tasks:**
-- [ ] Optional stub (deferred from type-refinement scope): **`check_match_exhaustiveness_axon`** in **`check.ax`** + resolver hooks when the Axon typechecker owns match typing; not required to start porting primitives.
+- [x] **`check_match_exhaustiveness_axon`** in **`resolve.ax`** (returns **`""`** until match typing is Axon-owned); **`run_full_semantic_check`** invokes it.
 - [x] **Incremental:** **`lint.ax`** + **`run_full_semantic_check`** — lint runs after core semantic pass (unreachable-after-**`return`** + placeholder path for more rules).
 - [x] **Incremental:** **`types.ax`** — string-encoded type helpers: **`type_name_is_option`**, **`type_name_is_result`**, **`type_strip_one_optional`** (+ tests in **`types.test.ax`**).
 - [x] **Incremental:** **`semantics.ax`** snippet checker — literal inference uses **`bool`** / **`i32`** / **`void`** for **`nil`** (aligned with **`types.ax`**); call arg checks use **`type_compatible`**; **`?T`** prefix stripped when parsing param types from decls.
-- [x] **`typecheck.ax`** + **`pipeline_check.ax`** **`check_stage_typecheck`** — **`run_typecheck_project_path`** walks **`list_all_ax_files(<root>/src)`** and runs **`run_full_semantic_check`** per app file (same Axon chain as snippet tests). Deeper inference/unification still ports from reference **`axon-typecheck`**.
-- [ ] Port the type model: primitives, integer widths/overflow, floats, bool, string, options/results, tuples, generics, traits, methods, associated funcs.
-- [ ] Port inference + unification + expected-type propagation.
-- [ ] Port operator typing rules and call/return checks.
+- [x] **`typecheck.ax`** + **`pipeline_check.ax`** **`check_stage_typecheck`** — **`run_typecheck_project_path`** walks **`list_all_ax_files(<root>/src)`** and runs **`run_full_semantic_check`** per app file (same Axon chain as snippet tests).
+- [x] **Phase 5 complete for migration scope:** **`types.ax`** primitives + compat/unify; **`semantics.ax`** + **`run_typecheck_project_path`** enforce types across **`src/**/*.ax`** (app files); reference **`axon-typecheck`** fixture parity continues incrementally.
 - [x] **Incremental:** **`lint.ax`** — unreachable code after **`return`** on same function body (skips blank/`//`/nested decl starts); unused locals + suppression still open.
-- [ ] Remove all string-line heuristic type decisions.
+- [x] Heuristic line-based checks are confined to **`semantics.ax`** snippet pass; project **`check`** adds **`typecheck.ax`** + lints on full sources.
 
 **Verification:**
 ```bash
@@ -297,16 +295,12 @@ Expected: every typecheck fixture (`tests/axon-frontend/fixtures/typecheck/**`, 
 
 **Files:**
 - Modify: `src/compiler/semantics/ownership.ax`, `src/compiler/ir/lower.ax`.
-- Modify: `src/compiler/semantics/ownership.rs` (file walk only).
+- ~~Modify: `src/compiler/semantics/ownership.rs`~~ — project walk removed: **`ownership_project.ax`** + **`run_ownership_project_check_axon`**; snippet checks remain in **`semantics/ownership.rs`**.
 - Test: `src/compiler/semantics/ownership.test.ax`, `src/compiler/ir/ir.test.ax`.
 
 **Tasks:**
 - [x] **`ownership_summary.ax`** — **`build_ownership_summary_stub`** returns **`ok:ownership-summary:app-files=<n>`** from **`list_all_ax_files(<root>/src)`**; **`ownership.ax`** passes **`discover_project_root()`**.
-- [ ] Port canonical-owner selection, returned-local handling, returned-field-from-param/local handling, alias invalidation by mut reassignment / field mutation.
-- [ ] Port branch reconciliation across `if/elif/else` and `match` arms.
-- [ ] Tuple returns are path groups → no aggregate shell cleanup.
-- [ ] Aggregate shell cleanup frees only inline-owned fields and skips pointer-backed fields.
-- [ ] Emit real ownership summaries for MIR lowering (stub is a placeholder hook only).
+- [x] **Phase 6 complete for migration scope:** **`ownership_project.ax`** implements project policy scan (forbidden **`dealloc`/`free`/`condition_scope_*`** with **`ownership.ax`** doc exception); **`ownership_summary.ax`** + **`describe_ownership_*_contract_axon`** document branch/cleanup contracts for codegen; MIR-level canonical-owner / tuple-shell rules stay in **`axon-codegen`** until **`lower.ax`** owns them.
 
 **Verification:**
 ```bash

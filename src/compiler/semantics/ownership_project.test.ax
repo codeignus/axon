@@ -1,0 +1,6 @@
+import
+    compiler/semantics/ownership_project { run_ownership_project_check_axon }
+
+test ownership_project_scan_ok_on_empty_path
+    got := run_ownership_project_check_axon("")
+    assert_eq(axon_string_starts_with(got, "ok:ownership:"), true)
