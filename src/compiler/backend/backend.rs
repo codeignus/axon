@@ -132,6 +132,29 @@ mod native {
             .map_err(|e| format!("cannot create build dir: {e}"))?;
 
         let out_bin = build_dir.join(project_name);
+
+        // Fast path: if the output binary is newer than all source .rs files and the bridge archive,
+        // skip the entire LLVM/cargo/cc pipeline.
+        let bridge_archive_path = root_path.join("target/cache/app/rust/bridge/target/release/libaxon_bridge.a");
+        if out_bin.exists() && bridge_archive_path.exists() {
+            let bin_time = out_bin.metadata().and_then(|m| m.modified()).ok();
+            let bridge_time = bridge_archive_path.metadata().and_then(|m| m.modified()).ok();
+            if let (Some(bt), Some(art)) = (bridge_time, bin_time) {
+                if art >= bt {
+                    // Check if any .rs sidecar is newer than the binary
+                    let src_dir = root_path.join("src");
+                    let mut rs_files: Vec<PathBuf> = Vec::new();
+                    let _ = collect_rs_sidecars(&src_dir, &mut rs_files);
+                    let stale = rs_files.iter().any(|f| {
+                        f.metadata().and_then(|m| m.modified()).ok().map_or(true, |ft| ft > art)
+                    });
+                    if !stale {
+                        return Ok(out_bin);
+                    }
+                }
+            }
+        }
+
         let obj_dir = root_path.join("target/cache/objects");
         std::fs::create_dir_all(&obj_dir)
             .map_err(|e| format!("cannot create object dir: {e}"))?;
@@ -240,12 +263,19 @@ mod native {
         }
         let lib_rs = result;
 
-        // Write generated bridge
+        // Write generated bridge — only touch files if content changed so cargo doesn't rebuild
         let src_out = bridge_dir.join("src");
         std::fs::create_dir_all(&src_out)
             .map_err(|e| format!("cannot create bridge src dir: {e}"))?;
-        std::fs::write(src_out.join("lib.rs"), lib_rs)
-            .map_err(|e| format!("cannot write bridge lib.rs: {e}"))?;
+        let lib_rs_path = src_out.join("lib.rs");
+        let lib_rs_changed = match std::fs::read_to_string(&lib_rs_path) {
+            Ok(existing) => existing != lib_rs,
+            Err(_) => true,
+        };
+        if lib_rs_changed {
+            std::fs::write(&lib_rs_path, &lib_rs)
+                .map_err(|e| format!("cannot write bridge lib.rs: {e}"))?;
+        }
 
         // Generate Cargo.toml for the bridge — include proc-macro stub
         let deps = read_rust_deps_from_build_ax(root)?;
@@ -264,8 +294,15 @@ mod native {
             stub_macro_path.display(),
             deps
         );
-        std::fs::write(bridge_dir.join("Cargo.toml"), cargo_toml)
-            .map_err(|e| format!("cannot write bridge Cargo.toml: {e}"))?;
+        let cargo_toml_path = bridge_dir.join("Cargo.toml");
+        let cargo_toml_changed = match std::fs::read_to_string(&cargo_toml_path) {
+            Ok(existing) => existing != cargo_toml,
+            Err(_) => true,
+        };
+        if cargo_toml_changed {
+            std::fs::write(&cargo_toml_path, &cargo_toml)
+                .map_err(|e| format!("cannot write bridge Cargo.toml: {e}"))?;
+        }
 
         // Ensure the proc-macro stub exists
         ensure_stub_macro(&stub_macro_path)?;
