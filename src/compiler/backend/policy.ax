@@ -1,9 +1,17 @@
-// Phase 8 policy surface in Axon (orchestration stays in backend.rs until codegen is .ax-owned).
+// Phase 8 policy surface in Axon.
+// After the zero-cargo cutover, backend.rs drives native codegen in-process via inkwell.
+
 pub func describe_native_codegen_boundary() String
-    return "policy:native-codegen:llvm-object-emission-only-via-sidecar"
+    return "policy:native-codegen:in-process-inkwell-ffi"
 
 pub func describe_link_artifact_contract() String
     return "policy:artifacts:target-build-layout-single-project"
 
 pub func assert_no_second_compiler_workspace() String
     return "ok:policy:no-second-compiler-workspace"
+
+/// LLVM codegen is linked into the Axon staticlib via the bridge Cargo.toml.
+/// backend.rs drives native codegen directly via inkwell — no subprocess,
+/// no driver binary.
+pub func describe_phase8_migration_codegen_bridge() String
+    return "policy:inproc:inkwell linked into staticlib; no subprocess; no driver binary"

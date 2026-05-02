@@ -25,3 +25,7 @@ func axon_classify_test_target(path: String) String
     if axon_string_count(path, "") == 0:
         return "test:project"
     return axon_classify_check_target(path)
+
+/// Documents how `axon test [<target>]` classifies scopes (mirrors check for non-empty targets).
+pub func describe_test_command_target_contract() String
+    return "test: empty->test:project else same-as-check=file|dir|dir-recursive; valid paths enforced via command_targets.validate_test_file_path(src/**/*.test.ax,tests/**/*.ax)"

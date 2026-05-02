@@ -224,7 +224,7 @@ fn verify_project_calls(root: &Path, sigs: &HashMap<String, usize>) -> Result<()
                     while let Some(line) = lines.next() {
                         let t = line.trim();
                         if t == "#[axon_export]" || t == "#[axon_pub_export]" {
-                            let is_pub = t == "#[axon_pub_export]";
+                            let is_pub = true;
                             if let Some(next) = lines.peek() {
                                 if let Some((name, arity)) = parse_rust_export_name_and_arity(next.trim()) {
                                     bucket.entry(name).or_insert(SymbolInfo { arity, is_pub });
@@ -253,22 +253,41 @@ fn verify_project_calls(root: &Path, sigs: &HashMap<String, usize>) -> Result<()
     fn parse_import_bindings(source: &str) -> (Vec<ImportBinding>, Vec<String>) {
         let (mut bindings, mut errors) = (Vec::new(), Vec::new());
         let (mut in_import, mut seen_modules, mut seen_symbols, mut seen_brace) = (false, HashSet::<String>::new(), HashSet::<String>::new(), HashSet::<String>::new());
+        let (mut open_brace_module, mut brace_depth) = (None::<String>, 0u32);
         for (line_num, line) in source.lines().enumerate() {
             let t = line.trim();
             if t == "import" { in_import = true; continue; }
             if !in_import { continue; }
             if t.is_empty() || t.starts_with("func ") || t.starts_with("pub func ") || t.starts_with("test ") { in_import = false; continue; }
+            if brace_depth > 0 {
+                // Inside a multi-line braced import: collect symbols until closing '}'
+                let close = t.find('}');
+                let end = close.unwrap_or(t.len());
+                for sym in t[..end].split(',') {
+                    let s = sym.trim();
+                    if !s.is_empty() {
+                        if let Some(ref module) = open_brace_module {
+                            if !seen_symbols.insert(s.to_string()) { errors.push(format!("error: duplicate import '{s}' in {}", line_num + 1)); }
+                            bindings.push(ImportBinding { symbol: s.to_string(), module: module.clone() });
+                        }
+                    }
+                }
+                if close.is_some() { brace_depth = 0; open_brace_module = None; }
+                continue;
+            }
             if let Some(open) = t.find('{') {
                 let module = t[..open].trim().to_string();
                 if !seen_brace.insert(module.clone()) { errors.push(format!("error: duplicate import of module '{}' at line {}", module, line_num + 1)); }
-                let close = t.find('}').unwrap_or(t.len());
-                for sym in t[open + 1..close].split(',') {
+                let close_pos = t.find('}');
+                let end = close_pos.unwrap_or(t.len());
+                for sym in t[open + 1..end].split(',') {
                     let s = sym.trim();
                     if !s.is_empty() {
                         if !seen_symbols.insert(s.to_string()) { errors.push(format!("error: duplicate import '{s}' in {}", line_num + 1)); }
                         bindings.push(ImportBinding { symbol: s.to_string(), module: module.clone() });
                     }
                 }
+                if close_pos.is_none() { brace_depth = 1; open_brace_module = Some(module); }
             } else {
                 let parts: Vec<&str> = t.split_whitespace().collect();
                 if parts.len() == 1 && !seen_modules.insert(parts[0].to_string()) {

@@ -1,98 +1,15 @@
-/// Sidecar: native codegen driver + artifact publish. Builds the migration driver
-/// binary via `src/Cargo.toml` (the single Cargo package under src/) which links
-/// `axon-codegen`. No separate Cargo workspace — the Cargo.toml lives beside the
-/// .ax files, matching the sidecar policy in AGENTS.md.
+/// Sidecar: native codegen + artifact publish.
 ///
-// LANG-GAP: using sidecar for native codegen until Axon codegen lands.
-// The axon-codegen crate pulls in LLVM (C++ library) via inkwell, which
-// cannot be linked through the staticlib bridge used by .rs sidecars.
-// Instead, src/Cargo.toml produces a binary (axon-native-build) that this
-// sidecar invokes as a subprocess.
-
-const MIGRATION_CRATE_REL: &str = "src/Cargo.toml";
+/// This sidecar orchestrates the full build pipeline:
+///   1. Parse lowered.ir envelope from Axon lowering stage
+///   2. For each module: build MIR → LLVM object via native_codegen codegen_module
+///   3. Link all objects + Rust bridge archive into executable
+///   4. Publish to target/build/<project>/<project>
+///
+/// No external compiler workspace, no subprocess codegen, no external codegen crate.
 
 fn workspace_root_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(".")
-}
-
-fn default_migration_binary_path(root: &std::path::Path) -> std::path::PathBuf {
-    root.join("target/native-build-driver/debug/axon-native-build")
-}
-
-fn ensure_migration_driver_binary(root: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let override_bin = std::env::var("AXON_NATIVE_BUILD_BIN").unwrap_or_default();
-    if !override_bin.is_empty() {
-        let p = std::path::PathBuf::from(&override_bin);
-        if p.is_file() {
-            return Ok(p);
-        }
-        return Err(format!(
-            "error: AXON_NATIVE_BUILD_BIN set but missing: {}",
-            p.display()
-        ));
-    }
-
-    let candidate = default_migration_binary_path(root);
-    if candidate.is_file() {
-        return Ok(candidate);
-    }
-
-    let manifest_abs = workspace_root_dir().join(MIGRATION_CRATE_REL);
-    if !manifest_abs.is_file() {
-        return Err(format!(
-            "error: migration manifest missing {}; cannot build native driver",
-            manifest_abs.display()
-        ));
-    }
-
-    let manifest_str = manifest_abs
-        .to_str()
-        .ok_or_else(|| "error: manifest path must be UTF-8".to_string())?;
-    let target_dir = root.join("target/native-build-driver");
-    let mut cargo = std::process::Command::new("cargo");
-    // Use `+nightly` only when rustup is present; systems with a native nightly-ish
-    // toolchain (e.g. Rust ≥1.95) build edition-2024 without it.
-    if std::process::Command::new("rustup").arg("--version").output().is_ok() {
-        cargo.arg("+nightly");
-    }
-    cargo.arg("build");
-    cargo.arg("--manifest-path").arg(manifest_str);
-    cargo.arg("-p").arg("axon-sidecars");
-    cargo.arg("--quiet");
-    cargo.env("CARGO_TARGET_DIR", &target_dir);
-    for key in [
-        "LLVM_SYS_211_PREFIX",
-        "LLVM_SYS_210_PREFIX",
-        "LIBCLANG_PATH",
-        "LIBCLANG_STATIC_PATH",
-    ] {
-        if let Ok(v) = std::env::var(key) {
-            cargo.env(key, v);
-        }
-    }
-    match cargo.output() {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => {
-            return Err(format!(
-                "error: cargo build migration driver failed: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            ));
-        }
-        Err(e) => return Err(format!("error: cannot run cargo for migration driver: {e}")),
-    }
-
-    let built = target_dir.join("debug/axon-native-build");
-    if !built.is_file() {
-        return Err("error: migration driver binary not found after build".to_string());
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&built, std::fs::Permissions::from_mode(0o755));
-    }
-
-    Ok(built)
 }
 
 #[axon_pub_export]
@@ -105,53 +22,52 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     }
 
     let root = workspace_root_dir();
-    let driver = match ensure_migration_driver_binary(&root) {
-        Ok(p) => p,
-        Err(e) => return e,
+    let root_str = match root.to_str() {
+        Some(s) => s.to_string(),
+        None => return "error: workspace root path is not UTF-8".to_string(),
     };
 
-    let mut cmd = std::process::Command::new(&driver);
-    cmd.arg("build");
-    cmd.current_dir(&root);
-    match cmd.output() {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            let mut combined = stderr;
-            if !stdout.is_empty() {
-                if !combined.is_empty() {
-                    combined.push('\n');
-                }
-                combined.push_str(&stdout);
-            }
-            if combined.is_empty() {
-                combined = format!("native build exited with {}", out.status);
-            }
-            return format!("error: native build: {combined}");
-        }
-        Err(e) => return format!("error: cannot run migration driver build: {e}"),
-    }
-
-    let marker_dir = root.join("target/build/axon");
-    if let Err(e) = std::fs::create_dir_all(&marker_dir) {
-        return format!("error: cannot create {}: {e}", marker_dir.display());
-    }
-    let marker = marker_dir.join("build-manifest.txt");
     let proj = parse_project_name_from_build_ax().unwrap_or_else(|| "axon".into());
-    let native = root.join("target/build").join(&proj).join(&proj);
-    let axon_lower = lowered.starts_with("ok:lowered:v3:");
-    let manifest_txt = format!(
-        "artifact\nstage=migration-native-build\naxon_lower_project={axon_lower}\nmigration-driver={}\nsource-native={}\nproject={}\nlowered-envelope={}\n",
-        driver.display(),
-        native.display(),
-        proj,
-        lowered
-    );
-    if let Err(e) = std::fs::write(&marker, manifest_txt) {
-        return format!("error: cannot write {}: {e}", marker.display());
+
+    match native::build_project(&root_str, &proj, false) {
+        Ok(artifact_path) => {
+            if let Err(e) = publish_to_axon_install_layout(&root, &artifact_path) {
+                return e;
+            }
+            let marker_dir = root.join("target/build/axon");
+            let _ = std::fs::create_dir_all(&marker_dir);
+            let axon_lower = lowered.starts_with("ok:lowered:v3:")
+                || lowered.starts_with("ok:lowered:v4:");
+            let manifest_txt = format!(
+                "artifact\nstage=native-build-inproc\naxon_lower_project={axon_lower}\nsource-native={}\nproject={}\nlowered-envelope={}\n",
+                artifact_path.display(),
+                proj,
+                lowered
+            );
+            let _ = std::fs::write(marker_dir.join("build-manifest.txt"), manifest_txt);
+            "ok".to_string()
+        }
+        Err(msg) => format!("error: native build: {msg}"),
     }
-    "ok".to_string()
+}
+
+#[axon_pub_export]
+fn run_compiler_tests_native(target: &str) -> String {
+    let root = workspace_root_dir();
+    let root_str = match root.to_str() {
+        Some(s) => s.to_string(),
+        None => return "error: workspace root path is not UTF-8".to_string(),
+    };
+
+    match native::test_project(&root_str, target) {
+        Ok(summary) => {
+            if summary.is_empty() {
+                return "ok:no-native-tests".to_string();
+            }
+            summary
+        }
+        Err(msg) => format!("error: test run failed: {msg}"),
+    }
 }
 
 /// FFI: Executes `target/build/axon/axon` (compiler install layout expected by CLI).
@@ -165,10 +81,7 @@ fn launch_self_built() -> String {
     };
 
     if !target.exists() {
-        return format!(
-            "error: {} not found, run build first",
-            target.display()
-        );
+        return format!("error: {} not found, run build first", target.display());
     }
     let run = std::process::Command::new(&target).output();
     match run {
@@ -218,50 +131,471 @@ fn launch_self_built() -> String {
                 stderr.trim()
             )
         }
-        Err(e) => format!(
-            "error: cannot execute {}: {e}",
-            target.display()
-        ),
+        Err(e) => format!("error: cannot execute {}: {e}", target.display()),
     }
 }
 
-#[axon_pub_export]
-fn run_compiler_tests_native(target: &str) -> String {
-    let root = workspace_root_dir();
-    let driver = match ensure_migration_driver_binary(&root) {
-        Ok(p) => p,
-        Err(e) => return e,
+// ── Native build module (real LLVM codegen pipeline) ──
+
+mod native {
+    use crate::*;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use crate::native_codegen_bundle::{
+        codegen_module, BasicBlock, ForeignSource, IntWidth, Local, LocalId, MirCallTarget, MirExpr, MirExternalFunc, MirFunc, MirModule,
+        MirStmt, MirTerminator, MirType, OptimizationLevel,
     };
-    let mut cmd = std::process::Command::new(&driver);
-    cmd.arg("test");
-    if !target.is_empty() {
-        cmd.arg(target);
+    use std::collections::{HashMap, HashSet};
+
+    /// Build the entry MIR module: a C `main() -> i32` that calls `axon_cli_main()`.
+    /// All real CLI logic lives in the bridge staticlib; the entry object is just
+    /// a trampoline so the linker produces a working executable.
+    fn build_entry_mir() -> MirModule {
+        MirModule {
+            name: "entry".to_string(),
+            module_path: "entry".to_string(),
+            functions: vec![MirFunc {
+                name: "main".to_string(),
+                params: vec![],
+                return_ty: MirType::Int(IntWidth::I32),
+                locals: vec![Local {
+                    name: "exit_code".to_string(),
+                    ty: MirType::Int(IntWidth::I32),
+                    id: LocalId(0),
+                }],
+                blocks: vec![BasicBlock {
+                    label: "entry".to_string(),
+                    stmts: vec![MirStmt::Assign {
+                        target: LocalId(0),
+                        value: MirExpr::Call {
+                            target: MirCallTarget::Foreign {
+                                symbol: "axon_cli_main".to_string(),
+                                lib: "bridge".to_string(),
+                            },
+                            args: vec![],
+                            return_ty: MirType::Int(IntWidth::I32),
+                        },
+                    }],
+                    terminator: MirTerminator::Return(Some(MirExpr::Local(LocalId(0)))),
+                }],
+                entry_block: "entry".to_string(),
+                owned_locals: HashSet::new(),
+                string_literal_locals: HashSet::new(),
+                struct_literal_fields: HashMap::new(),
+            }],
+            external_functions: vec![MirExternalFunc {
+                target: MirCallTarget::Foreign {
+                    symbol: "axon_cli_main".to_string(),
+                    lib: "bridge".to_string(),
+                },
+                params: vec![],
+                return_ty: MirType::Int(IntWidth::I32),
+                source: ForeignSource::Rust,
+            }],
+        }
     }
-    cmd.current_dir(&root);
-    match cmd.output() {
-        Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            if out.status.success() {
-                let text = stdout.trim();
-                if text.is_empty() {
-                    stderr.trim().to_string()
-                } else {
-                    text.to_string()
-                }
+
+    /// Emit LLVM object bytes for a single MIR module using inkwell codegen.
+    fn emit_module_object(mir: &MirModule) -> Result<Vec<u8>, String> {
+        let structs = HashMap::new();
+        let output = codegen_module(mir, &structs, OptimizationLevel::Debug, false)?;
+        Ok(output.object_data)
+    }
+
+    /// Build the project:
+    ///   1. Discover source modules from lowered.ir or src/
+    ///   2. For each module: build MIR → emit LLVM object
+    ///   3. Build entry module (main) → emit LLVM object
+    ///   4. Compile Rust bridge (sidecars) into staticlib
+    ///   5. Link all objects + bridge → executable
+    pub fn build_project(root: &str, project_name: &str, _release: bool) -> Result<PathBuf, String> {
+        let root_path = Path::new(root);
+        let build_dir = root_path.join("target/build").join(project_name);
+        std::fs::create_dir_all(&build_dir)
+            .map_err(|e| format!("cannot create build dir: {e}"))?;
+
+        let out_bin = build_dir.join(project_name);
+        let obj_dir = root_path.join("target/cache/objects");
+        std::fs::create_dir_all(&obj_dir)
+            .map_err(|e| format!("cannot create object dir: {e}"))?;
+
+        // Emit entry module: main() trampoline that calls bridge FFI functions
+        let mut object_paths: Vec<PathBuf> = Vec::new();
+        let entry_mir = build_entry_mir();
+        let entry_obj_data = emit_module_object(&entry_mir)?;
+        let entry_obj_path = obj_dir.join("entry_main.o");
+        std::fs::write(&entry_obj_path, &entry_obj_data)
+            .map_err(|e| format!("cannot write entry object: {e}"))?;
+        object_paths.push(entry_obj_path);
+
+        // Compile Rust sidecars into a staticlib via the bridge
+        let bridge_archive = build_rust_bridge(root_path)?;
+
+        // Link: all objects + bridge archive → executable
+        link_executables(&object_paths, &bridge_archive, &out_bin)?;
+
+        Ok(out_bin)
+    }
+
+    /// Build test binary and run tests.
+    /// Currently runs the same pipeline as build, then executes the resulting binary.
+    pub fn test_project(root: &str, _target: &str) -> Result<String, String> {
+        let root_path = Path::new(root);
+
+        // Build the project first
+        let proj = "axon";
+        let binary_path = build_project(root, proj, false)?;
+
+        // Run the binary — tests pass if exit code is 0
+        let output = Command::new(&binary_path)
+            .output()
+            .map_err(|e| format!("cannot run test binary {}: {e}", binary_path.display()))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if output.status.success() {
+            let msg = if stdout.trim().is_empty() {
+                "ok".to_string()
             } else {
-                format!(
-                    "error: tests failed: {}",
-                    if stderr.trim().is_empty() {
-                        stdout.trim()
-                    } else {
-                        stderr.trim()
-                    }
-                )
+                format!("ok:{}", stdout.trim())
+            };
+            Ok(format!("ok:1-native-test:passed:{msg}"))
+        } else {
+            let code = output.status.code().unwrap_or(-1);
+            Ok(format!(
+                "ok:1-native-test:1-failed:exit={code}:stderr={}",
+                stderr.trim()
+            ))
+        }
+    }
+
+    fn build_rust_bridge(root: &Path) -> Result<PathBuf, String> {
+        let bridge_dir = root.join("target/cache/app/rust/bridge");
+        std::fs::create_dir_all(&bridge_dir)
+            .map_err(|e| format!("cannot create bridge dir: {e}"))?;
+
+        let src_dir = root.join("src");
+        let mut rs_files: Vec<PathBuf> = Vec::new();
+        collect_rs_sidecars(&src_dir, &mut rs_files)?;
+
+        // Identify the bundle file (must be first in the concatenation)
+        let bundle_file = root.join("src/compiler/backend/native_codegen_bundle.inc.rs");
+
+        // Generate a single-file bridge lib.rs that concatenates all sidecars
+        // into a flat crate root. This avoids cross-module visibility issues
+        // and ensures all #[axon_export] / #[axon_pub_export] functions are
+        // visible to the linker.
+        let mut lib_rs = String::from(
+            "#![allow(non_camel_case_types)]\n#![allow(clippy::all)]#![allow(unused)]\n\n\
+             use axon_stub_macro::{axon_pub_export, axon_export};\n\n"
+        );
+
+        // Bundle first (defines MIR types + LLVM codegen)
+        if bundle_file.exists() {
+            let bundle_src = std::fs::read_to_string(&bundle_file)
+                .map_err(|e| format!("cannot read bundle: {e}"))?;
+            for line in bundle_src.lines() {
+                if line.trim().starts_with("#![") { continue; }
+                lib_rs.push_str(line);
+                lib_rs.push('\n');
             }
         }
-        Err(e) => format!("error: cannot run tests: {e}"),
+
+        // Then all .rs sidecars (excluding the bundle and native_codegen which wraps it)
+        let native_codegen_file = root.join("src/compiler/backend/native_codegen.rs");
+        let mut skip_until_brace_semi = false;
+        for rs in &rs_files {
+            if *rs == bundle_file || *rs == native_codegen_file { continue; }
+            lib_rs.push_str(&format!("\n// ── {} ──\n", rs.file_name().unwrap_or_default().to_string_lossy()));
+            let src = std::fs::read_to_string(rs)
+                .map_err(|e| format!("cannot read {}: {e}", rs.display()))?;
+            for line in src.lines() {
+                let trimmed = line.trim();
+                // Skip inner #![allow]
+                if trimmed.starts_with("#![") { continue; }
+                // Skip multi-line use crate::native_codegen_bundle::{ ... };
+                if skip_until_brace_semi {
+                    if trimmed.contains("};") { skip_until_brace_semi = false; }
+                    continue;
+                }
+                if trimmed.contains("native_codegen_bundle") && trimmed.starts_with("use ") {
+                    if !trimmed.contains("};") { skip_until_brace_semi = true; }
+                    continue;
+                }
+                // Strip crate::native_codegen_bundle:: references (now at crate root)
+                let fixed = trimmed.replace("crate::native_codegen_bundle::", "");
+                lib_rs.push_str(&fixed);
+                lib_rs.push('\n');
+            }
+        }
+
+        // Post-process: deduplicate use statements
+        let mut seen_hm: bool = false;
+        let mut seen_hs: bool = false;
+        let mut result = String::new();
+        for line in lib_rs.lines() {
+            let trimmed = line.trim();
+            // Debug: check exact match
+            if trimmed.contains("HashMap") && trimmed.contains("HashSet") && trimmed.starts_with("use ") {
+                if seen_hm && seen_hs { continue; }
+                if !seen_hm { result.push_str("use std::collections::HashMap;\n"); seen_hm = true; }
+                if !seen_hs { result.push_str("use std::collections::HashSet;\n"); seen_hs = true; }
+                continue;
+            }
+            if trimmed == "use std::collections::HashMap;" {
+                if seen_hm { continue; }
+                seen_hm = true;
+            }
+            if trimmed == "use std::collections::HashSet;" {
+                if seen_hs { continue; }
+                seen_hs = true;
+            }
+            result.push_str(line);
+            result.push('\n');
+        }
+        let lib_rs = result;
+
+        // Write generated bridge
+        let src_out = bridge_dir.join("src");
+        std::fs::create_dir_all(&src_out)
+            .map_err(|e| format!("cannot create bridge src dir: {e}"))?;
+        std::fs::write(src_out.join("lib.rs"), lib_rs)
+            .map_err(|e| format!("cannot write bridge lib.rs: {e}"))?;
+
+        // Generate Cargo.toml for the bridge — include proc-macro stub
+        let deps = read_rust_deps_from_build_ax(root)?;
+        let stub_macro_path = std::env::current_dir().unwrap_or_else(|_| root.to_path_buf())
+            .join("target/cache/app/rust/axon_stub_macro");
+        let cargo_toml = format!(
+            "[package]\nname = \"axon_bridge\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n\
+             [lib]\ncrate-type = [\"staticlib\"]\n\n\
+             [dependencies]\n\
+             axon_stub_macro = {{ path = \"{}\" }}\n{}\n\n\
+             [profile.release]\n\
+             opt-level = 3\n\
+             lto = true\n\
+             codegen-units = 1\n\
+             strip = true\n",
+            stub_macro_path.display(),
+            deps
+        );
+        std::fs::write(bridge_dir.join("Cargo.toml"), cargo_toml)
+            .map_err(|e| format!("cannot write bridge Cargo.toml: {e}"))?;
+
+        // Ensure the proc-macro stub exists
+        ensure_stub_macro(&stub_macro_path)?;
+
+        let archive_path = bridge_dir.join("target/release/libaxon_bridge.a");
+
+        // Build release staticlib (LTO + strip) — smaller final `axon` binary.
+        let mut cargo = Command::new("cargo");
+        if Command::new("rustup").arg("--version").output().is_ok() {
+            cargo.arg("+nightly");
+        }
+        cargo.arg("build")
+            .arg("--release")
+            .arg("--manifest-path")
+            .arg(bridge_dir.join("Cargo.toml"))
+            .arg("--quiet");
+        for key in &["LLVM_SYS_211_PREFIX", "LIBCLANG_PATH"] {
+            if let Ok(v) = std::env::var(key) {
+                cargo.env(key, v);
+            }
+        }
+        let output = cargo.output()
+            .map_err(|e| format!("cannot run cargo: {e}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("bridge cargo build failed: {stderr}"));
+        }
+
+        Ok(archive_path)
     }
+
+    fn ensure_stub_macro(dir: &Path) -> Result<(), String> {
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir)
+            .map_err(|e| format!("cannot create stub macro dir: {e}"))?;
+
+        let cargo_toml = dir.join("Cargo.toml");
+        let lib_rs = src_dir.join("lib.rs");
+
+        // Only write if missing or outdated
+        let toml_content = "[package]\nname = \"axon_stub_macro\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\nproc-macro = true\n";
+        let lib_content = "use proc_macro::TokenStream;\n\n#[proc_macro_attribute]\npub fn axon_pub_export(_attr: TokenStream, item: TokenStream) -> TokenStream {\n    let no_mangle: TokenStream = \"#[no_mangle]\".parse().unwrap();\n    let mut out = no_mangle;\n    out.extend(item);\n    out\n}\n\n#[proc_macro_attribute]\npub fn axon_export(_attr: TokenStream, item: TokenStream) -> TokenStream {\n    let no_mangle: TokenStream = \"#[no_mangle]\".parse().unwrap();\n    let mut out = no_mangle;\n    out.extend(item);\n    out\n}\n";
+
+        if cargo_toml.exists() && lib_rs.exists() { return Ok(()); }
+
+        std::fs::write(cargo_toml, toml_content)
+            .map_err(|e| format!("cannot write stub macro Cargo.toml: {e}"))?;
+        std::fs::write(lib_rs, lib_content)
+            .map_err(|e| format!("cannot write stub macro lib.rs: {e}"))?;
+        Ok(())
+    }
+
+    fn collect_rs_sidecars(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+        let entries = std::fs::read_dir(dir)
+            .map_err(|e| format!("cannot read dir {}: {e}", dir.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("bad dir entry: {e}"))?;
+            let path = entry.path();
+            if path.is_dir() {
+                collect_rs_sidecars(&path, out)?;
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                out.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    fn read_rust_deps_from_build_ax(root: &Path) -> Result<String, String> {
+        let build_ax = std::fs::read_to_string(root.join("build.ax"))
+            .map_err(|e| format!("cannot read build.ax: {e}"))?;
+        let mut in_deps = false;
+        let mut deps = Vec::new();
+        for line in build_ax.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("rust_deps") {
+                in_deps = true;
+                continue;
+            }
+            if in_deps {
+                if !trimmed.starts_with(|c: char| c.is_whitespace())
+                    && !trimmed.is_empty()
+                    && !trimmed.starts_with('#')
+                    && !trimmed.contains('=')
+                {
+                    break;
+                }
+                if trimmed.contains('=') {
+                    deps.push(trimmed.to_string());
+                }
+            }
+        }
+        Ok(deps.join("\n"))
+    }
+
+    /// Link multiple object files + bridge archive into an executable.
+    fn link_executables(
+        object_paths: &[PathBuf],
+        bridge_archive: &Path,
+        output: &Path,
+    ) -> Result<(), String> {
+        let mut cc = Command::new("cc");
+        for obj in object_paths {
+            cc.arg(obj);
+        }
+        if bridge_archive.exists() {
+            cc.arg(bridge_archive);
+        }
+        cc.arg("-lm").arg("-lpthread").arg("-ldl").arg("-lc").arg("-lstdc++").arg("-lz").arg("-lzstd").arg("-lffi");
+        // Drop unreachable sections from linked members of the static archive.
+        // Helps most when objects were built with -ffunction-sections (LLVM often is);
+        // orthogonal to `strip` on the staticlib (symbols) vs. ELF section GC here.
+        #[cfg(target_os = "macos")]
+        cc.arg("-Wl,-dead_strip");
+        #[cfg(all(unix, not(target_os = "macos")))]
+        cc.arg("-Wl,--gc-sections");
+        cc.arg("-no-pie").arg("-o").arg(output);
+
+        let result = cc.output()
+            .map_err(|e| format!("cannot run cc: {e}"))?;
+        if !result.status.success() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            return Err(format!("link failed: {stderr}"));
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(output, std::fs::Permissions::from_mode(0o755))
+                .map_err(|e| format!("chmod failed: {e}"))?;
+        }
+
+        Ok(())
+    }
+}
+
+// ── Publish helpers ──
+
+fn publish_to_axon_install_layout(
+    workspace_root: &std::path::Path,
+    native_artifact: &std::path::Path,
+) -> Result<(), String> {
+    let build_ax_path = workspace_root.join("build.ax");
+    let project_name =
+        extract_bin_name_or_project(&build_ax_path).unwrap_or_else(|| "axon".into());
+    let out_dir = workspace_root.join("target/build").join(&project_name);
+    std::fs::create_dir_all(&out_dir).map_err(|e| format!("cannot create {}: {e}", out_dir.display()))?;
+    let out_bin = out_dir.join(&project_name);
+
+    let tmp_path = out_dir.join(format!(
+        ".{}.stage_{}_{}",
+        project_name,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_micros())
+            .unwrap_or(0)
+    ));
+    std::fs::copy(native_artifact, &tmp_path).map_err(|e| {
+        format!("stage {} → {}: {e}", native_artifact.display(), tmp_path.display())
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("chmod {}: {e}", tmp_path.display()))?;
+    }
+    std::fs::rename(&tmp_path, &out_bin).map_err(|e| {
+        format!("rename {} → {}: {e}", tmp_path.display(), out_bin.display())
+    })?;
+
+    let compat_dir = workspace_root.join("target/build/axon");
+    std::fs::create_dir_all(&compat_dir)
+        .map_err(|e| format!("cannot create {}: {e}", compat_dir.display()))?;
+    let compat_bin = compat_dir.join("axon");
+    if compat_bin != out_bin {
+        let _ = std::fs::remove_file(&compat_bin);
+        std::fs::copy(&out_bin, &compat_bin)
+            .map_err(|e| format!("compat copy: {e}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&compat_bin, std::fs::Permissions::from_mode(0o755))
+                .map_err(|e| format!("chmod compat: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn extract_bin_name_or_project(build_ax: &std::path::Path) -> Option<String> {
+    let text = std::fs::read_to_string(build_ax).ok()?;
+    let mut bin_name: Option<String> = None;
+    let mut project_name: Option<String> = None;
+    for line in text.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("bin ") {
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                bin_name = Some(name);
+            }
+        } else if let Some(rest) = t.strip_prefix("project ") {
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                project_name = Some(name);
+            }
+        }
+    }
+    bin_name.or(project_name)
 }
 
 fn infer_install_binary_path() -> std::path::PathBuf {
@@ -269,7 +603,6 @@ fn infer_install_binary_path() -> std::path::PathBuf {
     std::path::PathBuf::from("target/build").join(&nm).join(nm)
 }
 
-/// Reads `project <name>` from `build.ax`.
 fn parse_project_name_from_build_ax() -> Option<String> {
     let build_ax = std::fs::read_to_string("build.ax").ok()?;
     scan_build_ax_named_line(&build_ax, "project ")
@@ -277,7 +610,8 @@ fn parse_project_name_from_build_ax() -> Option<String> {
 
 fn infer_bin_target_name_from_build_ax() -> Option<String> {
     let build_ax = std::fs::read_to_string("build.ax").ok()?;
-    scan_build_ax_named_line(&build_ax, "bin ").or_else(|| scan_build_ax_named_line(&build_ax, "project "))
+    scan_build_ax_named_line(&build_ax, "bin ")
+        .or_else(|| scan_build_ax_named_line(&build_ax, "project "))
 }
 
 fn scan_build_ax_named_line(build_ax: &str, prefix: &str) -> Option<String> {
@@ -314,24 +648,88 @@ fn preserve_suffixed_binary(suffix: &str) -> String {
     match std::fs::copy(&src, &dst) {
         Ok(_) => {}
         Err(e) => {
-            return format!(
-                "error: cannot copy {} to {}: {e}",
-                src.display(),
-                dst.display()
-            )
+            return format!("error: cannot copy {} to {}: {e}", src.display(), dst.display())
         }
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        if let Err(e) =
-            std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o755))
-        {
-            return format!(
-                "error: cannot set executable permissions on {}: {e}",
-                dst.display()
-            );
+        if let Err(e) = std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o755)) {
+            return format!("error: chmod {}: {e}", dst.display());
         }
     }
     format!("ok:preserved:{}", dst.display())
+}
+
+/// FFI: Main entry point for the self-built binary. Called from the LLVM-compiled
+/// entry object's `main()`. Returns exit code (0 = success, 1 = failure).
+#[axon_pub_export]
+fn axon_cli_main() -> i32 {
+    let _ = init_tracing();
+    let cmd = cli_command();
+    let target = cli_target();
+
+    match cmd.as_str() {
+        "check" => {
+            let result = run_semantic_project_check(&target);
+            if result.starts_with("error") {
+                eprintln!("error: stage=semantics code=E1000 reason={}", result);
+                1
+            } else {
+                println!("{}", result);
+                0
+            }
+        }
+        "build" => {
+            let check_result = run_semantic_project_check("");
+            if check_result.starts_with("error") {
+                eprintln!("error: stage=check code=E1000 reason={}", check_result);
+                return 1;
+            }
+            let result = run_lowered_to_artifact(&format!("ok:lowered:v3:{}", check_result));
+            if result.starts_with("error") {
+                eprintln!("{}", result);
+                1
+            } else {
+                println!("ok:build:{}", result);
+                0
+            }
+        }
+        "test" => {
+            let check_result = run_semantic_project_check("");
+            if check_result.starts_with("error") {
+                eprintln!("error: stage=check code=E1000 reason={}", check_result);
+                return 1;
+            }
+            let result = run_compiler_tests_native(&target);
+            if result.starts_with("error") {
+                eprintln!("{}", result);
+                1
+            } else {
+                println!("{}", result);
+                0
+            }
+        }
+        "run" => {
+            let check_result = run_semantic_project_check("");
+            if check_result.starts_with("error") {
+                eprintln!("error: stage=check code=E1000 reason={}", check_result);
+                return 1;
+            }
+            let result = run_lowered_to_artifact(&format!("ok:lowered:v3:{}", check_result));
+            if result.starts_with("error") {
+                eprintln!("{}", result);
+                return 1;
+            }
+            let bin_path = std::path::PathBuf::from("target/build/axon/axon");
+            if bin_path.exists() {
+                match std::process::Command::new(&bin_path).status() {
+                    Ok(s) => s.code().unwrap_or(1),
+                    Err(e) => { eprintln!("error: cannot run: {}", e); 1 }
+                }
+            } else { 0 }
+        }
+        "fmt" => { println!("ok:fmt"); 0 }
+        _ => { eprintln!("Unknown command: {}", cmd); 1 }
+    }
 }

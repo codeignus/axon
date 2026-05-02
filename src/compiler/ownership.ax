@@ -1,6 +1,6 @@
 import
     compiler/diagnostics/diagnostics { stage_should_abort }
-    compiler/proj/discover { discover_project_root }
+    compiler/proj/discover { project_entry_root }
     compiler/semantics/ownership_summary { build_ownership_summary_stub }
     compiler/semantics/ownership_project { run_ownership_project_check_axon }
 
@@ -14,8 +14,8 @@ import
 // Conditionals behave like inlined scopes with caller values "passed" in — outer bindings are inputs;
 // branches are analyzed independently (only one runs at runtime). Reassigning a `mut` slot in `if`
 // and again in `elif` is not two competing owners — it is updating the slot on mutually exclusive paths.
-// Enforcement: reverse-use assigns `MirFunc::owned_locals` per CFG path; see bootstrap MIR ownership.
-// `axon-codegen` crate (`llvm_backend` module docs: Conditionals and mut); do not replace with line-scan heuristics.
+// Enforcement: reverse-use assigns `MirFunc::owned_locals` per CFG path; see Axon MIR ownership
+// semantics. Do not replace with line-scan heuristics — project scan + MIR-backed rules only.
 
 pub func validate_ownership_invariants() String
     cond := validate_conditional_contract()
@@ -27,7 +27,7 @@ pub func validate_ownership_invariants() String
     lifecycle := validate_lifecycle_contract()
     if stage_should_abort(lifecycle):
         return lifecycle
-    summary := build_ownership_summary_stub(discover_project_root())
+    summary := build_ownership_summary_stub(project_entry_root())
     if stage_should_abort(summary):
         return summary
     project := run_ownership_project_check_axon("")

@@ -1,7 +1,8 @@
 import
     compiler/proj/targets {
         resolve_check_target,
-        resolve_test_target
+        resolve_test_target,
+        describe_test_command_target_contract
     }
     compiler/proj/command_targets {
         run_command_name,
@@ -123,3 +124,8 @@ test resolve_build_target_dot_is_dir
 
 test resolve_dotdotdot_target
     assert_eq(resolve_check_target("..."), "dir-recursive:.")
+
+test describe_test_command_target_contract_documents_paths
+    d := describe_test_command_target_contract()
+    assert_eq(axon_string_contains(d, "test:project"), true)
+    assert_eq(axon_string_contains(d, ".test.ax"), true)

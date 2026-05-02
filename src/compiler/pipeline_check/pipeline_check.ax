@@ -22,8 +22,8 @@ pub func validate_project_structure(root: String) String
         return entry
     return "ok"
 
-// Split into tiny per-stage helpers: the legacy axon-codegen can truncate very long
-// sequential `if` chains inside one function.  Each helper below does exactly one check
+// Split into tiny per-stage helpers. Long sequential `if` chains inside one
+// function are hard to maintain. Each helper below does exactly one check
 // and returns either "ok" or a diag_error string.
 
 pub func run_check_preflight() String

@@ -2,7 +2,7 @@
 import
     compiler/types/composites/string { string_len }
     compiler/proj/discover {
-        discover_project_root,
+        project_entry_root,
         list_all_ax_files,
         get_line_at,
         read_source_file,
@@ -13,7 +13,7 @@ import
 pub func run_typecheck_project_path(path: String) String
     root := axon_string_trim(path)
     if string_len(root) == 0:
-        root = discover_project_root()
+        root = project_entry_root()
     src := string_concat(root, "/src")
     files := list_all_ax_files(src)
     if axon_string_starts_with(files, "error:"):

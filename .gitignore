@@ -3,3 +3,4 @@
 # Reference compiler tree (clone separately for migration / LLVM bootstrap)
 deprecioated-soon-compiler-do-not-rename/
 depreciating-soon-compiler-do-not-rename/
+native-rust/

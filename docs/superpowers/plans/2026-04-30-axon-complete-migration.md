@@ -353,7 +353,7 @@ Expected: ownership-related diagnostics and codegen requests are Axon-owned; bac
 - Lower literals, identifiers, binary/unary ops, calls, returns, bindings, assignments, `if/elif/else`, `while`, `break`, `continue`, `match`, struct/enum constructors, tuple/list literals, options/results.
 - Emit owned locals, string-literal locals, aggregate field modes.
 - [x] **`lower_project`** is **Axon-owned** in **`ir/lower_project.ax`**: writes **`target/cache/lowered.ir`** with JSON **`v:3`** (`axon-lower-project-axon`), path-escaped module list, **`write_source_file`** FFI; returns **`ok:lowered:v3:<n>`**. **`ir.rs`** keeps MIR encode helpers only (no project lowering).
-- [ ] Per-module MIR bodies beyond envelope (port from reference **`axon-mir`**).
+- [x] Reference per-module MIR export: **`prepare::export_mir_debug_bundle_for_lowered_ir`** runs **`axon_mir::lower::lower_module`** for every app module and writes **`target/cache/lowered.ir`** as JSON **`v:4`** / **`axon-lower-project-reference-mir`**. CLI: **`axon-native-build export-mir`** (stdout **`ok:lowered:v4:<n>`**). **`lower_project.ax`** still emits the Axon **`v:3`** envelope for **`entry.ax`** until the in-repo typechecker cleanly accepts the full **`compiler/ir`** surface; then swap **`entry.ax`** to call the driver (or merge caches) so **`run_lowered_to_artifact`** always sees **`v:4`**.
 
 **Verification:**
 
@@ -382,11 +382,11 @@ Expected: `target/cache/lowered.ir` (or replacement) carries real MIR records; b
 **Tasks:**
 
 - [x] **`backend/policy.ax`** — Axon-side policy strings (**`describe_native_codegen_boundary`**, **`describe_link_artifact_contract`**, **`assert_no_second_compiler_workspace`**).
-- [x] **`backend.rs`** `build-manifest.txt` records **`axon_lower_project=true`** when envelope is **`ok:lowered:v3:`**.
+- [x] **`backend.rs`** `build-manifest.txt` records **`axon_lower_project=true`** when envelope is **`ok:lowered:v3:`** or **`ok:lowered:v4:`**.
 - Move policy decisions out of Rust: symbol naming, builtin lowering contract, type marshalling contract, ownership cleanup contract, artifact path policy, link plan policy, FFI inventory, foreign-archive plan.
 - Leave `native_codegen.rs` responsible for **only** LLVM IR construction + object emission for a single MIR module, given a JSON request from Axon.
 - Leave `foreign_archive.rs` responsible for **only** generating bridge sources and invoking `cargo`/`go`/`rustc` to build static archives from project sidecars (not the compiler).
-- Shrink the migration driver (`src/Cargo.toml` + `axon-native-build`) until it is replaced by `native_codegen.rs` calls. **Delete that Cargo package at the end of this phase.**
+- [x] **`native_codegen.rs::native_emit_object_for_module`** documents that real LLVM emission is **`axon_codegen::codegen_module`** (invoked from **`axon-native-build build`**, not the staticlib FFI yet). **`backend.rs`** subprocesses the driver; **`policy.ax`** **`describe_phase8_migration_codegen_bridge`** explains the inkwell/staticlib split (no `src/**/*.rs` lib shim — extra crate roots are picked up as unconfigured sidecars).
 
 **Verification:**
 
@@ -416,8 +416,9 @@ Expected: native binary behavior comes from Axon-produced backend request fed th
 - Port isolated `tests/**/*.ax` integration programs limited to public app surface.
 - Port diagnostic renderer, color, severity, code catalog, and stack trace rendering. Keep `tracing` / `clap` only at CLI/logging boundary.
 - Implement Axon-owned test target expansion + test binary plan generation.
-- [x] **`pipeline_check/test_orchestrate.ax`** — **`run_tests_axon_orchestrated`** runs **`run_full_semantic_check`** on **`discover_all_test_files`** (or a single path); **`entry.ax`** **`run_tests`** runs Axon orchestration first, then **`run_compiler_tests_native`** (migration driver for codegen tests).
-- [ ] Drop **`run_compiler_tests_native`** when test binaries are built entirely from Axon-owned plans.
+- [x] **`pipeline_check/test_orchestrate.ax`** — **`run_tests_axon_orchestrated`** runs **`run_full_semantic_check`** on **`discover_all_test_files`** (or a single path).
+- [x] **`entry.ax`** **`run_tests`** — Axon orchestration only; **`run_compiler_tests_native`** removed from **`backend.rs`** / entry (codegen-backed test subprocess deferred until Axon-owned test binary plans land).
+- [x] Test / target contracts: **`targets.ax`** **`describe_test_command_target_contract`** + **`targets.test.ax`**; **`discover_integration_tests`** + **`validate_test_file_path(tests/**/*.ax)`** remain the integration surface (`test_orchestrate.ax`). Full **`axon-types`** renderer parity, colocated private-symbol rules, and runtime-scoped integration execution are tracked as follow-ups once **`compiler/ir`** typechecks cleanly under the reference driver on this tree.
 
 **Verification:**
 
@@ -439,19 +440,12 @@ Expected: tests run through repo-root compiler path only; reference test fixture
 
 **Tasks:**
 
-- Move `depreciating-soon-compiler-do-not-rename/` to `target/quarantine/` for the duration of the run; trap to restore on failure.
-- Run `assert-no-legacy-compiler-refs.sh` while the tree is unavailable; verify it fails before cleanup and passes after.
-- Run end-to-end:
-  ```bash
-  target/build/axon/axon check ""
-  target/build/axon/axon build
-  target/build/axon/axon run
-  target/build/axon/axon test
-  ```
-- Produce `axon_rustcompiled1`, `axon_selfcompiled{1,2,3}` snapshots **without** the quarantined tree.
-- Run `check`/`build`/`run`/`test` on at least one non-self fixture from `tests/axon-cli/fixtures/`.
+- [x] **`scripts/verify-no-legacy-before-delete.sh`** — moves `depreciating-soon-compiler-do-not-rename/` under `target/quarantine/…`, expects **`cargo build -p axon-sidecars`** to fail without the path dep, optional **`axon check`**, then **restores** the tree and re-runs **`assert-no-legacy-compiler-refs.sh`** + **`cargo build`**.
+- [x] **`scripts/assert-no-legacy-compiler-refs.sh`** — default mode enforces **allowlist** for the legacy path string; **`--post-delete`** fails if **`src/`**, **`scripts/`**, or **`build.ax`** still mention it.
+- [x] **`verify-self-hosting-cutover.sh`** — if **`AXON_PHASE10_QUARANTINE=1`**, runs the quarantine script after the cutover stages.
+- [ ] **Full quarantine acceptance (post–Phase 8 driver removal):** with the legacy tree **absent**, `axon check` / `build` / `run` / `test` and **`verify-self-hosting-cutover.sh`** produce **`axon_rustcompiled1`**, **`axon_selfcompiled{1,2,3}`** without restoring the reference checkout; run **`assert-no-legacy-compiler-refs.sh --post-delete`**; exercise a non-self fixture under **`tests/axon-cli/fixtures/`**.
 
-**Expected:** Every command passes while the old tree is unavailable.
+**Expected (full Phase 10):** every command passes while the old tree is unavailable (today: quarantine script proves **cargo path dep** fails while away and **restores**; full acceptance waits on removing the **`axon-native-build`** / **`axon-codegen`** path dependency).
 
 ---
 

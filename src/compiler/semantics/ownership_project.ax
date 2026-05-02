@@ -3,7 +3,7 @@ import
     compiler/types/composites/string { string_len }
     compiler/syntax/token { i64_to_string }
     compiler/proj/discover {
-        discover_project_root,
+        project_entry_root,
         list_all_ax_files,
         get_line_at,
         read_source_file,
@@ -13,7 +13,7 @@ import
 pub func run_ownership_project_check_axon(root: String) String
     r := axon_string_trim(root)
     if string_len(r) == 0:
-        r = discover_project_root()
+        r = project_entry_root()
     src := string_concat(r, "/src")
     files := list_all_ax_files(src)
     if axon_string_starts_with(files, "error:"):
