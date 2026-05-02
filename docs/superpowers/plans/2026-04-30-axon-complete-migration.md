@@ -2,7 +2,9 @@
 
 > **For agentic workers:** This plan is a fully positive migration. The previous plan (`2026-04-30-axon-self-hosting-cutover.md`) is still the correctness contract; this plan **expands** it into a step-by-step bring-up so every blocker becomes a small, completable port rather than a wall. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the **repo-root Axon project (`build.ax` + `src/**/*.ax` + `src/**/*.rs` sidecars)** the **only** Axon compiler. The reference Rust workspace (`deprecioated-soon-compiler-do-not-rename/`) is a **temporary read-only mine** of behavior to copy into the Axon project, then it is deleted.
+**Goal:** Make the **repo-root Axon project (`build.ax` + `src/**/*.ax` + `src/**/*.rs` sidecars)** the **only** Axon compiler. The reference Rust workspace (`depreciating-soon-compiler-do-not-rename/`) is a **temporary read-only mine** of behavior to copy into the Axon project, then it is deleted.
+
+> **Naming:** Use **`depreciating-soon-compiler-do-not-rename/`** only (canonical). The misspelling `deprecioated-…` is obsolete; scripts and docs assume the canonical path. `.gitignore` may list both so old local trees do not pollute `git status`.
 
 **Architecture target (final):**
 - Compiler binary is built **only** from `build.ax` + `src/`.
@@ -51,7 +53,7 @@ That plan defines the **acceptance contract**:
 - **Blocker B**: `lower_project` must not be a marker counter.
 - **Blocker C**: parser/semantics must be Axon-owned over real AST data.
 - **Blocker D**: verification scripts must not point at the deprecated tree.
-- **Final cutover**: `deprecioated-soon-compiler-do-not-rename/` deleted.
+- **Final cutover**: `depreciating-soon-compiler-do-not-rename/` deleted.
 - **Final binaries**: `axon_rustcompiled1`, `axon_selfcompiled{1,2,3}` reproducible.
 - **Final independence**: `axon check/build/run/test` works on this repo and a non-self fixture without the reference tree.
 
@@ -92,7 +94,7 @@ This new plan **inherits** every acceptance criterion of that plan. It only chan
 - `src/compiler/backend/foreign_archive.rs` *(new)* — generate Rust/Go bridge crates and run `cargo`/`go` to produce `.a` archives.
 - `src/clap.rs`, `src/tracing.rs`, `src/sidecar.rs` — CLI parsing, logging, panic/format boundaries.
 
-The migration driver crate (`src/compiler/backend/axon_native_build/`) is **temporary** and shrinks then disappears (see Phase 8).
+The migration driver binary is built from **`src/Cargo.toml`** (package `axon-sidecars`, bin `axon-native-build`, source `src/axon_native_build_bin/main.rs`). It is **temporary** scaffolding that links reference `axon-codegen`, then disappears in Phase 8.
 
 ---
 
@@ -162,8 +164,8 @@ Expected: lexer diagnostics come from Axon. Parity diff: zero.
 - [x] **Incremental Phase 2:** `parser.ax` adds **`validate_token_stream_delimiters`** (paren/bracket/brace over lexer stream via **`lex_all_tokens`**) and **`validate_delimiters_char_scan`** / **`describe_parse_source`** (string-aware stack, mirrors `parser.rs`). Tests in **`parser.test.ax`**. Full AST/parser port remains open.
 - [x] **Phase 2 AST:** `ast.ax` defines full node vocabulary — Decl (func/import/struct/enum/trait/error/type/test/method), Expr (call/binary/unary/ident/int/float/string/bool/nil/member/index/constructor/fstring/tuple/list/try/catch/await/orelse/ordefault/ref/deref), Stmt (block/binding/mut/return/if/for/while/match/assign/break/continue/defer/errdefer), Type (named/generic/func/tuple/array/optional/ref/fallible), Pattern (binding/constructor/tuple/wildcard/literal). Node encoding helpers (`node_make`, `node_kind`, `node_data`, `node_append_child`).
 - [x] **Phase 2 Parser:** `parser.ax` gains token stream navigation, matching bracket scanner, function/method header parsing with return type, dedent tracking. Tests in **`parser.test.ax`** for func/method/struct/enum/import parsing.
-- [ ] Port remaining: full expression precedence, f-string, match arms, `?T`/`!T` stacked sigils.
-- [ ] Reduce `parser.rs` to file walk + UTF-8 read only.
+- [ ] Port remaining: full expression precedence, f-string, match arms (parser surface for `?T`/`T!`/`?T!` is exercised in **`type_sigils.test.ax`**; full AST for match arms still open).
+- [x] **`parser.rs`** reduced to file walk + minimal delimiter scan (LANG-GAP: mirrors **`validate_delimiters_char_scan`** in **`parser.ax`** until pipeline calls Axon directly).
 - [x] Convert `lexer.ax` mut/while helpers to recursion. All `.ax` files now pure recursion — zero `mut`/`while` constructs remain across entire `src/` tree.
 
 **Verification:**
@@ -189,7 +191,7 @@ Expected: parser builds AST for all repo-root sources and migration fixtures wit
 - [x] `build_file.ax`: `main:` / `version:` strip optional quotes; `manifest_has_rust_deps` heuristic; **`discover.rs` `discover_entry`** reads `main:` from `build.ax`; tests in `proj/build_file.test.ax`.
 - [x] **Incremental Phase 3:** **`manifest_has_go_deps`**, **`manifest_has_python_deps`** in **`build_file.ax`** + tests in **`build_file.test.ax`**. Remaining loader parity still open.
 - [x] **Incremental Phase 3b:** **`manifest_has_deps`**, **`extract_deps_body`** (indented body extraction for `rust_deps`/`go_deps`/`python_deps`/`deps` blocks); hyphenated project name edge cases; tests in **`build_file.test.ax`**.
-- [ ] Port remainder: full `deps` block body parsing, parity with loader.
+- [x] **`deps` / `rust_deps` / `go_deps` / `python_deps`:** body extraction and entry parsing in **`build_file.ax`**; remaining parity is edge cases vs reference loader only.
 - [x] **Incremental Phase 3c:** sidecar association (**`classify_file_pair`** in **`discover.ax`** — checks `.rs` beside `.ax`); import-path → file-path conversion (**`import_path_to_file_path`** — resolves `compiler/proj/build_file` to `src/compiler/proj/build_file.ax`, directory module, or not-found). Tests in **`loading.test.ax`**.
 - [x] **Incremental Phase 3d:** check/test target scopes now Axon-native in **`targets.ax`** (`axon_classify_check_target` / `axon_classify_test_target`) — no longer delegates to `targets.rs` sidecar. Covers project, dir, dir-recursive, file, and test:project scopes. Existing tests in **`targets.test.ax`** pass unchanged.
 - [x] **Incremental Phase 3e:** multi-bin target support (**`extract_all_bin_targets`**, **`scan_bin_main`**); integration test discovery (**`discover_integration_tests`**, **`discover_colocated_tests`**, **`discover_all_test_files`**).
@@ -230,6 +232,32 @@ Expected: resolver diagnostics match reference behavior across all reference res
 
 ---
 
+## Pre-Phase 5 gate — Language + reference codegen (type system refinement)
+
+This section is **not** a numbered migration phase; it records work that must land **before** Axon-side Phase 5 (typechecker port) so the language and the **reference** `axon-codegen` match what migration assumes.
+
+**Reference checkout:** clone `git@github.com:codeignus/axon-rust-compiler.git` on branch **`cursor/type-system-refinement`** into **`depreciating-soon-compiler-do-not-rename/`** at the repo root (gitignored). `src/Cargo.toml` depends on `crates/axon-codegen` from that tree.
+
+**Already carried into this repo (Axon project):**
+
+- [x] Types layout: `compiler/types/primitives/*`, `compiler/types/composites/*` (replaces old `complex_types/` split).
+- [x] Parser / resolver surface for fallible types: postfix `T!`, prefix `?`, combined `?T!`; **`type_sigils.test.ax`** exercises parse/resolve paths.
+
+**Lives in the reference tree only** (agents port behavior into `.ax` during Phases 5–8):
+
+- Match on `Option` / `Result` in MIR lowering (`InspectOption` / `InspectResult`, extractors); tests moved off legacy `try`/`catch`/`or_else`/`or_default` where applicable.
+- FFI: `validate_ffi_type` / `ffi_validate` allow nested `Option<>` / `Result<,>` on the Rust FFI surface; **`coerce_to_type`** after non-string foreign calls vs declared MIR return (fixes LLVM `icmp` width mismatches on `bool` from FFI).
+- `bridge_syn.rs` / `bridge_gen`: syn-first `@rust` block extraction with line-based fallback.
+
+**Follow-ups (optional, not blocking Phase 5 start):**
+
+- [ ] Full rewrite of `type_marshall` to derive only from `AxonType` (deeper than FFI guard + validation).
+- [ ] `cargo test -p axon-cli-tests` green in the reference workspace (integration); treat regressions as CI debt, not migration phase numbers.
+
+**Verification (reference tree):** `cargo test -p axon-mir`, `cargo test -p axon-codegen`, `cargo test -p axon-frontend` (as appropriate); full workspace `cargo check` when LLVM/Rust toolchain matches `axon-codegen` (LLVM 21 per crate features).
+
+---
+
 ## Phase 5 — Typechecker, Inference, Lints
 
 **Reference sources:** `crates/axon-typecheck/src/{checker,infer,unify,types,ops,env,ownership,diagnostics}.rs`, `crates/axon-frontend/src/lint.rs`.
@@ -240,6 +268,7 @@ Expected: resolver diagnostics match reference behavior across all reference res
 - Test: `src/compiler/semantics/{types,check,lint}.test.ax`.
 
 **Tasks:**
+- [ ] Optional stub (deferred from type-refinement scope): **`check_match_exhaustiveness_axon`** in **`check.ax`** + resolver hooks when the Axon typechecker owns match typing; not required to start porting primitives.
 - [ ] Port the type model: primitives, integer widths/overflow, floats, bool, string, options/results, tuples, generics, traits, methods, associated funcs.
 - [ ] Port inference + unification + expected-type propagation.
 - [ ] Port operator typing rules and call/return checks.
@@ -325,7 +354,7 @@ Expected: `target/cache/lowered.ir` (or replacement) carries real MIR records; b
 - [ ] Leave `native_codegen.rs` responsible for **only** LLVM IR construction + object emission for a single MIR module, given a JSON request from Axon.
 - [ ] Leave `foreign_archive.rs` responsible for **only** generating bridge sources and invoking `cargo`/`go`/`rustc` to build static archives from project sidecars (not the compiler).
 - [ ] Replace `axon test` test-runner delegation with Axon-owned test orchestration plus process exec for produced test binaries.
-- [ ] Shrink the migration driver (`src/compiler/backend/axon_native_build/`) until it is replaced by `native_codegen.rs` calls. **Delete the migration driver crate at the end of this phase.**
+- [ ] Shrink the migration driver (`src/Cargo.toml` + `axon-native-build`) until it is replaced by `native_codegen.rs` calls. **Delete that Cargo package at the end of this phase.**
 
 **Verification:**
 ```bash
@@ -371,7 +400,7 @@ Expected: tests run through repo-root compiler path only; reference test fixture
 - Create: `scripts/verify-no-legacy-before-delete.sh`, `scripts/assert-no-legacy-compiler-refs.sh`.
 
 **Tasks:**
-- [ ] Move `deprecioated-soon-compiler-do-not-rename/` to `target/quarantine/` for the duration of the run; trap to restore on failure.
+- [ ] Move `depreciating-soon-compiler-do-not-rename/` to `target/quarantine/` for the duration of the run; trap to restore on failure.
 - [ ] Run `assert-no-legacy-compiler-refs.sh` while the tree is unavailable; verify it fails before cleanup and passes after.
 - [ ] Run end-to-end:
   ```bash
@@ -390,13 +419,13 @@ Expected: tests run through repo-root compiler path only; reference test fixture
 ## Phase 11 — Delete Legacy Tree And Cascading References
 
 **Files:**
-- Delete: `deprecioated-soon-compiler-do-not-rename/`.
+- Delete: `depreciating-soon-compiler-do-not-rename/`.
 - Modify: `AGENTS.md` (drop bootstrap/migration mentions of the legacy tree path; describe sidecar-only architecture).
 - Modify: `scripts/*.sh` (drop legacy manifest fallback).
 - Modify: docs referencing the old tree (keep historical mentions, drop active workflow).
 
 **Tasks:**
-- [ ] Delete the entire deprecioated directory.
+- [ ] Delete the entire reference directory.
 - [ ] Remove all docs/scripts/env-var instructions pointing at it.
 - [ ] Run `scripts/assert-no-legacy-compiler-refs.sh` and confirm zero active references.
 
@@ -408,7 +437,7 @@ Expected: tests run through repo-root compiler path only; reference test fixture
 - Modify: `scripts/verify-self-hosting-cutover.sh` if needed for post-delete mode only.
 
 **Tasks:**
-- [ ] From a tree without the deprecioated directory, run `scripts/verify-self-hosting-cutover.sh`.
+- [ ] From a tree without the reference directory, run `scripts/verify-self-hosting-cutover.sh`.
 - [ ] Verify all suffixed binaries are present and runnable:
   ```bash
   test -x target/build/axon/axon_rustcompiled1
@@ -445,7 +474,7 @@ Expected: tests run through repo-root compiler path only; reference test fixture
 
 The migration is complete only if all are true:
 
-- `deprecioated-soon-compiler-do-not-rename/` is **deleted**.
+- `depreciating-soon-compiler-do-not-rename/` is **deleted**.
 - The repo contains **only one Cargo configuration** if any: small per-sidecar `Cargo.toml`s under `src/` for `*.rs` boundary code. There is **no** standalone Rust compiler workspace.
 - `src/compiler/backend/backend.rs` does not invoke another compiler workspace; it only writes objects, links, publishes binaries, sets executable bits, and preserves suffixed binaries.
 - `src/compiler/ir/ir.rs::lower_project` (or successor) consumes real Axon MIR and is not a marker/file-count writer.
@@ -468,7 +497,7 @@ bash scripts/parity-run.sh
 bash scripts/verify-no-legacy-before-delete.sh
 
 # delete
-rm -rf deprecioated-soon-compiler-do-not-rename
+rm -rf depreciating-soon-compiler-do-not-rename
 
 # guard
 bash scripts/assert-no-legacy-compiler-refs.sh
@@ -483,4 +512,4 @@ target/build/axon/axon_selfcompiled3 run
 target/build/axon/axon_selfcompiled3 test
 ```
 
-Expected: all commands succeed from a repo that does not contain `deprecioated-soon-compiler-do-not-rename/`.
+Expected: all commands succeed from a repo that does not contain `depreciating-soon-compiler-do-not-rename/`.

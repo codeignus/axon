@@ -1,6 +1,6 @@
 # Reference Rust → Axon port map
 
-Reference checkout (local, gitignored): `deprecioated-soon-compiler-do-not-rename/`.
+Reference checkout (local, gitignored): `depreciating-soon-compiler-do-not-rename/` (clone `codeignus/axon-rust-compiler`, branch `cursor/type-system-refinement`).
 
 This table is the authoritative **first-pass** routing for migration phases in `docs/superpowers/plans/2026-04-30-axon-complete-migration.md`. Update it when splitting or renaming modules.
 

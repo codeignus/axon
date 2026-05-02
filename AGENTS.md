@@ -15,7 +15,7 @@ We are **actively migrating** the historical Rust-backed compiler **into this Ax
 
 - **Goal:** All compiler logic — lexing, parsing, resolution, typechecking, ownership, MIR lowering, codegen orchestration, project graph, command semantics, diagnostics — is owned by **`*.ax`** files in `src/`. Rust survives **only** as `*.rs` sidecars beside `*.ax` for OS/LLVM/process/IO boundaries.
 - **No second compiler:** the migration **never** introduces another Axon compiler project; we build outward from this one.
-- **Reference checkout for porting only:** the directory **`deprecioated-soon-compiler-do-not-rename/`** is the **read-only mine** we copy behavior from. It is **gitignored**, untracked, and **deleted** when the migration finishes.
+- **Reference checkout for porting only:** the directory **`depreciating-soon-compiler-do-not-rename/`** is the **read-only mine** we copy behavior from (clone `git@github.com:codeignus/axon-rust-compiler.git`, branch **`cursor/type-system-refinement`**, into that folder name). It is **gitignored**, untracked, and **deleted** when the migration finishes.
 - **Plan of record:** `docs/superpowers/plans/2026-04-30-axon-complete-migration.md` (which inherits acceptance criteria from `2026-04-30-axon-self-hosting-cutover.md`).
 
 ## Sidecar policy during migration (encouraged, not a workaround)
@@ -39,7 +39,7 @@ While codegen/codegen-orchestration is still being ported, building the compiler
 Migration entry points already in this repo:
 
 - **`src/compiler/syntax/lexer.rs`** — **Phase 1 complete:** full lexer (indent/dedent, raw `@rust`/`@go`, f-strings, etc.) exposes **`axon_lex_token_stream`**; **`lexer.ax` `lex_all_tokens`** calls it so the Axon-visible token stream matches the check pipeline.
-- **`src/compiler/backend/axon_native_build/`** — small temporary Cargo package under `src/` that exposes a CLI driver (`axon-native-build`). It links the reference `axon-codegen` library via path until the equivalent logic moves into `*.ax` + sidecars. It is **not** another compiler project; it is internal scaffolding that gets deleted at the end of Phase 8 of the migration plan.
+- **`src/Cargo.toml`** + **`src/axon_native_build_bin/main.rs`** — temporary Cargo package under `src/` that builds the **`axon-native-build`** driver. It links the reference **`axon-codegen`** crate from **`depreciating-soon-compiler-do-not-rename/`** until the equivalent logic moves into `*.ax` + sidecars. It is **not** another compiler project; it is internal scaffolding deleted at the end of Phase 8 of the migration plan.
 - **`src/compiler/backend/backend.rs`** — invokes that driver for native `check`/`build`/`test`. It does **not** subprocess any second `axon` CLI and does **not** point at any other compiler workspace.
 - **`AXON_NATIVE_BUILD_BIN`** — optional env var that points `backend.rs` at a prebuilt driver binary so it can skip rebuilding.
 
@@ -51,7 +51,7 @@ Migration entry points already in this repo:
 bash scripts/parity-run.sh                    # exit-code parity vs driver (see scripts/parity-fixture-list.txt)
 ```
 
-`verify-self-bootstrap.sh` and `verify-self-hosting-cutover.sh` look for a manifest in this order: `AXON_BOOTSTRAP_MANIFEST` env var, then `bootstrap-compiler/Cargo.toml`, then `deprecioated-soon-compiler-do-not-rename/Cargo.toml` if a reference checkout is present locally. After Phase 11 of the migration plan, only `bootstrap-compiler/Cargo.toml` and `AXON_BOOTSTRAP_MANIFEST` survive.
+`verify-self-bootstrap.sh` and `verify-self-hosting-cutover.sh` look for a manifest in this order: `AXON_BOOTSTRAP_MANIFEST` env var, then `bootstrap-compiler/Cargo.toml`, then `depreciating-soon-compiler-do-not-rename/Cargo.toml` if a reference checkout is present locally. After Phase 11 of the migration plan, only `bootstrap-compiler/Cargo.toml` and `AXON_BOOTSTRAP_MANIFEST` survive.
 
 ## Native artifact boundary (`src/compiler/backend/backend.rs`)
 

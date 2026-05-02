@@ -1,5 +1,5 @@
 // Full lexer: indent/dedent, parens/brackets/braces depth, `@rust`|`@go` + `@end` raw,
-// `f"..."`, numeric `_`, newline-in-string error. Mirrors deprecioated axon-frontend lexer.
+// `f"..."`, numeric `_`, newline-in-string error. Mirrors reference axon-frontend lexer.
 
 fn line_col_at_byte(source: &str, byte_off: usize) -> (usize, usize) {
     let slice = source.get(..byte_off.min(source.len())).unwrap_or("");
