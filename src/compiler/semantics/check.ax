@@ -1,5 +1,6 @@
 import
     compiler/types/composites/string { string_len }
+    compiler/semantics/lint { run_axon_lints }
 
 pub func run_semantic_check_for_source(source: String) String
     return axon_semantic_check(source)
@@ -45,5 +46,10 @@ pub func run_full_semantic_check(source: String) String
     core_err := axon_semantic_check(source)
     if axon_string_starts_with(core_err, "error"):
         return core_err
+
+    // 6. Axon-owned lints (placeholder; expands in Phase 5)
+    lint_err := run_axon_lints(source)
+    if axon_string_starts_with(lint_err, "error"):
+        return lint_err
 
     return "ok:full-semantic"

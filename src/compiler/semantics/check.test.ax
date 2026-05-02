@@ -34,6 +34,16 @@ test semantic_snippet_rejects_arg_type_mismatch
     got := run_semantic_check_for_source(source)
     assert_eq(message_is_error(got), "yes")
 
+test semantic_snippet_accepts_int_literal_for_Int_param
+    source := "func takes_int(v: Int) Int\n    return v\n\nfunc main() Int\n    takes_int(42)\n    return 0\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "no")
+
+test semantic_snippet_accepts_i32_literal_for_i64_param
+    source := "func f(v: i64) i64\n    return v\n\nfunc main() i64\n    f(1)\n    return 0\n"
+    got := run_semantic_check_for_source(source)
+    assert_eq(message_is_error(got), "no")
+
 test resolve_detects_duplicate_braced_imports
     source := "import\n    compiler/a { foo }\n    compiler/b { foo }\n\nfunc main() void\n    return\n"
     got := check_duplicate_braced_imports(source)

@@ -269,6 +269,9 @@ This section is **not** a numbered migration phase; it records work that must la
 
 **Tasks:**
 - [ ] Optional stub (deferred from type-refinement scope): **`check_match_exhaustiveness_axon`** in **`check.ax`** + resolver hooks when the Axon typechecker owns match typing; not required to start porting primitives.
+- [x] **Incremental:** **`lint.ax`** — `run_axon_lints` placeholder; **`run_full_semantic_check`** in **`check.ax`** invokes it after core semantic pass.
+- [x] **Incremental:** **`types.ax`** — string-encoded type helpers: **`type_name_is_option`**, **`type_name_is_result`**, **`type_strip_one_optional`** (+ tests in **`types.test.ax`**).
+- [x] **Incremental:** **`semantics.ax`** snippet checker — literal inference uses **`bool`** / **`i32`** / **`void`** for **`nil`** (aligned with **`types.ax`**); call arg checks use **`type_compatible`**; **`?T`** prefix stripped when parsing param types from decls.
 - [ ] Port the type model: primitives, integer widths/overflow, floats, bool, string, options/results, tuples, generics, traits, methods, associated funcs.
 - [ ] Port inference + unification + expected-type propagation.
 - [ ] Port operator typing rules and call/return checks.

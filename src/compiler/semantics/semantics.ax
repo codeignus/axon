@@ -1,5 +1,6 @@
 import
     compiler/types/composites/string { string_len }
+    compiler/semantics/types { type_compatible }
 
 func is_ident_char(c: String) bool
     if c == "_":
@@ -242,12 +243,20 @@ func parse_return_type_from_decl(line: String) String
         return "void"
     return take_ident(after)
 
+func strip_leading_optional_sigil(s: String) String
+    t := axon_string_trim(s)
+    if axon_string_starts_with(t, "?"):
+        rest := axon_string_sub(t, 1, string_len(t) - 1)
+        return strip_leading_optional_sigil(rest)
+    return t
+
 func extract_param_type(param: String) String
     colon_pos := find_char(param, ":")
     if colon_pos < 0:
         return "Unknown"
     after := axon_string_trim(axon_string_sub(param, colon_pos + 1, string_len(param) - colon_pos - 1))
-    return take_ident(after)
+    base := strip_leading_optional_sigil(after)
+    return take_ident(base)
 
 func split_params_raw(params: String) String
     return split_params_rec(params, 0, 0, 0, "")
@@ -327,9 +336,11 @@ func infer_type_of_expr(expr: String) String
     if axon_string_starts_with(e, "\""):
         return "String"
     if e == "true" || e == "false":
-        return "Bool"
+        return "bool"
+    if e == "nil":
+        return "void"
     if check_all_digits(e, 0):
-        return "Int"
+        return "i32"
     return "Unknown"
 
 func check_all_digits(e: String, pos: i64) bool
@@ -488,7 +499,7 @@ func check_arg_types_rec(args: String, callee: String, param_data: String, arg_i
         return ""
     expected_ty := lookup_func_param_type(param_data, callee, arg_idx)
     got_ty := infer_type_of_expr(a)
-    if string_len(expected_ty) > 0 && expected_ty != "Unknown" && got_ty != "Unknown" && expected_ty != got_ty:
+    if string_len(expected_ty) > 0 && expected_ty != "Unknown" && got_ty != "Unknown" && type_compatible(expected_ty, got_ty) == false:
         return "error: semantics: argument type mismatch calling '" + callee + "' (arg " + arity_char(arg_idx + 1) + " expected " + expected_ty + ", got " + got_ty + ") in snippet"
     return check_arg_types_rec(args, callee, param_data, arg_idx + 1)
 
