@@ -18,7 +18,7 @@ Any `.rs` file not on this list is a bug.
 | `compiler/semantics/ownership.rs` | snippet runner only | via `#[axon_pub_export]` |
 | `compiler/diagnostics/diagnostics.rs` | color/tty detection, render line | `diag_error`, `stage_should_abort`, `axon_diag_note`, `axon_diag_warn`, `axon_string_starts_with`, `axon_string_concat` |
 | `compiler/ir/ir.rs` | JSON encode helpers, write source file | `write_source_file`, `write_ir_cache`, `read_ir_cache`, `append_ir_module`, `ir_module_header`, `ir_local_entry`, `ir_assign_stmt`, `ir_return_terminator`, `ir_func_entry` |
-| `compiler/backend/backend.rs` | process exec / chmod / atomic rename / preserve | `run_lowered_to_artifact`, `launch_self_built`, `preserve_suffixed_binary` |
+| `compiler/backend/backend.rs` | bridge `cargo`/`cc`, chmod / atomic rename / preserve | `axon_cli_main`, `run_lowered_to_artifact`, `preserve_suffixed_binary` |
 | `compiler/backend/native_codegen.rs` | LLVM IR + object emit (inkwell) | `native_emit_object_for_module` |
 | `compiler/backend/foreign_archive.rs` | cargo/go subprocess for user rust_deps/go_deps | `foreign_build_rust_bridge_archive` |
 | `compiler/backend/toolchain.rs` | probe rustc/cc/go/llvm-config/clang | (internal helpers) |

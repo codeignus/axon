@@ -60,9 +60,8 @@ git ls-files | rg -n 'Cargo\.toml$' || true   # expect no tracked manifests
 
 `backend.rs` is the single sidecar entry point for build artifacts:
 
-- Build: calls `axon_codegen::compile::build` in-process, publishes the artifact to `target/build/<bin>/<bin>` and the install layout `target/build/axon/axon`.
-- Run: execute the published binary.
-- Test: calls `axon_codegen::compile::run_tests_target` in-process.
+- Build / run (Axon CLI): pipeline is in-process (`entry.ax` → `run_lowered_to_artifact`); artifacts land under `target/build/<bin>/<bin>` and compat `target/build/axon/axon`.
+- Test: orchestrated in-process (`pipeline_check`/`.test.ax`); no spawned `axon`.
 - Preserve: copy the install binary to `axon_<suffix>` for self-bootstrap snapshots.
 
 It must never invoke `cargo` against another compiler workspace, and it must never call out to a second `axon` CLI.

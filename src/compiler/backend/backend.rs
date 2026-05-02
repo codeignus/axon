@@ -51,90 +51,6 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     }
 }
 
-#[axon_pub_export]
-fn run_compiler_tests_native(target: &str) -> String {
-    let root = workspace_root_dir();
-    let root_str = match root.to_str() {
-        Some(s) => s.to_string(),
-        None => return "error: workspace root path is not UTF-8".to_string(),
-    };
-
-    match native::test_project(&root_str, target) {
-        Ok(summary) => {
-            if summary.is_empty() {
-                return "ok:no-native-tests".to_string();
-            }
-            summary
-        }
-        Err(msg) => format!("error: test run failed: {msg}"),
-    }
-}
-
-/// FFI: Executes `target/build/axon/axon` (compiler install layout expected by CLI).
-#[axon_pub_export]
-fn launch_self_built() -> String {
-    let build_ax_bin = infer_install_binary_path();
-    let target = if build_ax_bin.is_file() {
-        build_ax_bin
-    } else {
-        std::path::PathBuf::from("target/build/axon/axon")
-    };
-
-    if !target.exists() {
-        return format!("error: {} not found, run build first", target.display());
-    }
-    let run = std::process::Command::new(&target).output();
-    match run {
-        Ok(output) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let text = stdout.trim();
-            if text.is_empty() {
-                "ok:run".to_string()
-            } else {
-                format!("ok:run:{text}")
-            }
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            if stderr.contains("Usage:")
-                && stderr.contains("Commands:")
-                && stderr.contains("check")
-            {
-                match std::process::Command::new(&target).arg("check").output() {
-                    Ok(retry) if retry.status.success() => {
-                        let out = String::from_utf8_lossy(&retry.stdout);
-                        let text = out.trim();
-                        if text.is_empty() {
-                            return "ok:run".to_string();
-                        }
-                        return format!("ok:run:{text}");
-                    }
-                    Ok(retry) => {
-                        let err = String::from_utf8_lossy(&retry.stderr);
-                        return format!(
-                            "error: launch retry failed for {}: {}",
-                            target.display(),
-                            err.trim()
-                        );
-                    }
-                    Err(e) => {
-                        return format!(
-                            "error: cannot execute retry for {}: {e}",
-                            target.display()
-                        );
-                    }
-                }
-            }
-            format!(
-                "error: launch failed for {}: {}",
-                target.display(),
-                stderr.trim()
-            )
-        }
-        Err(e) => format!("error: cannot execute {}: {e}", target.display()),
-    }
-}
-
 // ── Native build module (real LLVM codegen pipeline) ──
 
 mod native {
@@ -236,39 +152,6 @@ mod native {
         link_executables(&object_paths, &bridge_archive, &out_bin)?;
 
         Ok(out_bin)
-    }
-
-    /// Build test binary and run tests.
-    /// Currently runs the same pipeline as build, then executes the resulting binary.
-    pub fn test_project(root: &str, _target: &str) -> Result<String, String> {
-        let root_path = Path::new(root);
-
-        // Build the project first
-        let proj = "axon";
-        let binary_path = build_project(root, proj, false)?;
-
-        // Run the binary — tests pass if exit code is 0
-        let output = Command::new(&binary_path)
-            .output()
-            .map_err(|e| format!("cannot run test binary {}: {e}", binary_path.display()))?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        if output.status.success() {
-            let msg = if stdout.trim().is_empty() {
-                "ok".to_string()
-            } else {
-                format!("ok:{}", stdout.trim())
-            };
-            Ok(format!("ok:1-native-test:passed:{msg}"))
-        } else {
-            let code = output.status.code().unwrap_or(-1);
-            Ok(format!(
-                "ok:1-native-test:1-failed:exit={code}:stderr={}",
-                stderr.trim()
-            ))
-        }
     }
 
     fn build_rust_bridge(root: &Path) -> Result<PathBuf, String> {
@@ -598,20 +481,9 @@ fn extract_bin_name_or_project(build_ax: &std::path::Path) -> Option<String> {
     bin_name.or(project_name)
 }
 
-fn infer_install_binary_path() -> std::path::PathBuf {
-    let nm = infer_bin_target_name_from_build_ax().unwrap_or_else(|| "axon".into());
-    std::path::PathBuf::from("target/build").join(&nm).join(nm)
-}
-
 fn parse_project_name_from_build_ax() -> Option<String> {
     let build_ax = std::fs::read_to_string("build.ax").ok()?;
     scan_build_ax_named_line(&build_ax, "project ")
-}
-
-fn infer_bin_target_name_from_build_ax() -> Option<String> {
-    let build_ax = std::fs::read_to_string("build.ax").ok()?;
-    scan_build_ax_named_line(&build_ax, "bin ")
-        .or_else(|| scan_build_ax_named_line(&build_ax, "project "))
 }
 
 fn scan_build_ax_named_line(build_ax: &str, prefix: &str) -> Option<String> {
@@ -669,8 +541,10 @@ fn axon_cli_main() -> i32 {
     let cmd = cli_command();
     let target = cli_target();
 
+    // LANG-GAP: self-built entry only has semantics + native build FFIs — no `.ax` `main.ax`/`run_tests` here,
+    // so `check`/`test` both run semantics; `build`/`run` match `entry.ax::build`/`run` (publish only).
     match cmd.as_str() {
-        "check" => {
+        "check" | "test" => {
             let result = run_semantic_project_check(&target);
             if result.starts_with("error") {
                 eprintln!("error: stage=semantics code=E1000 reason={}", result);
@@ -680,7 +554,7 @@ fn axon_cli_main() -> i32 {
                 0
             }
         }
-        "build" => {
+        "build" | "run" => {
             let check_result = run_semantic_project_check("");
             if check_result.starts_with("error") {
                 eprintln!("error: stage=check code=E1000 reason={}", check_result);
@@ -691,43 +565,9 @@ fn axon_cli_main() -> i32 {
                 eprintln!("{}", result);
                 1
             } else {
-                println!("ok:build:{}", result);
+                println!("ok:{}:{}", cmd, result);
                 0
             }
-        }
-        "test" => {
-            let check_result = run_semantic_project_check("");
-            if check_result.starts_with("error") {
-                eprintln!("error: stage=check code=E1000 reason={}", check_result);
-                return 1;
-            }
-            let result = run_compiler_tests_native(&target);
-            if result.starts_with("error") {
-                eprintln!("{}", result);
-                1
-            } else {
-                println!("{}", result);
-                0
-            }
-        }
-        "run" => {
-            let check_result = run_semantic_project_check("");
-            if check_result.starts_with("error") {
-                eprintln!("error: stage=check code=E1000 reason={}", check_result);
-                return 1;
-            }
-            let result = run_lowered_to_artifact(&format!("ok:lowered:v3:{}", check_result));
-            if result.starts_with("error") {
-                eprintln!("{}", result);
-                return 1;
-            }
-            let bin_path = std::path::PathBuf::from("target/build/axon/axon");
-            if bin_path.exists() {
-                match std::process::Command::new(&bin_path).status() {
-                    Ok(s) => s.code().unwrap_or(1),
-                    Err(e) => { eprintln!("error: cannot run: {}", e); 1 }
-                }
-            } else { 0 }
         }
         "fmt" => { println!("ok:fmt"); 0 }
         _ => { eprintln!("Unknown command: {}", cmd); 1 }
