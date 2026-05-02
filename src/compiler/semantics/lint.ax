@@ -1,0 +1,8 @@
+// Phase 5 will extend this module (unused locals, unreachable code, etc.).
+import
+    compiler/types/composites/string { string_len }
+
+pub func run_axon_lints(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return "ok:lint:empty"
+    return "ok:lint"

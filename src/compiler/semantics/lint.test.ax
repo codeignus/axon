@@ -1,0 +1,10 @@
+import
+    compiler/semantics/lint { run_axon_lints }
+
+test run_axon_lints_nonempty_source_ok
+    got := run_axon_lints("func main() void\n    return\n")
+    assert_eq(got, "ok:lint")
+
+test run_axon_lints_whitespace_only_empty
+    got := run_axon_lints("   \n\t  ")
+    assert_eq(got, "ok:lint:empty")
