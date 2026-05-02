@@ -1,0 +1,6 @@
+import
+    compiler/semantics/ownership_summary { build_ownership_summary_stub }
+
+test ownership_summary_counts_or_ok
+    got := build_ownership_summary_stub("")
+    assert_eq(axon_string_starts_with(got, "ok:ownership-summary:app-files="), true)

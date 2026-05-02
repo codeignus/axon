@@ -272,3 +272,116 @@ test validate_func_decl_pub
     stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5
     got := validate_func_decl(stream)
     assert_eq(got, "ok")
+
+// --- Phase 2: delimiter + token stream validation ---
+
+test validate_token_stream_delimiters_balanced
+    s := token_make("lparen", "(", 0, 1) + "\n" + token_make("rparen", ")", 1, 2)
+    assert_eq(validate_token_stream_delimiters(s), "ok")
+
+test validate_token_stream_delimiters_extra_paren
+    s := token_make("rparen", ")", 0, 1)
+    got := validate_token_stream_delimiters(s)
+    assert_eq(axon_string_contains(got, "extra"), true)
+
+test validate_delimiters_char_scan_ok
+    assert_eq(validate_delimiters_char_scan("func f() void\n    x := 1\n"), "ok")
+
+test validate_delimiters_char_scan_mismatch
+    got := validate_delimiters_char_scan("func f( void\n")
+    assert_eq(axon_string_contains(got, "mismatched"), true)
+
+test describe_parse_source_ok_minimal
+    got := describe_parse_source("func main() void\n    return\n")
+    assert_eq(got, "ok")
+
+// --- Phase 2: struct/enum/import/test declaration parsing tests ---
+
+test parse_struct_decl_basic
+    t1 := token_make("kw_struct", "struct", 0, 6)
+    t2 := token_make("ident", "Point", 7, 12)
+    stream := t1 + "\n" + t2
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_STRUCT_DECL(), "name=Point")
+    assert_eq(got, expected)
+
+test parse_struct_decl_pub
+    t1 := token_make("kw_pub", "pub", 0, 3)
+    t2 := token_make("kw_struct", "struct", 4, 10)
+    t3 := token_make("ident", "Config", 11, 17)
+    stream := t1 + "\n" + t2 + "\n" + t3
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_STRUCT_DECL(), "name=Config")
+    assert_eq(got, expected)
+
+test parse_enum_decl_basic
+    t1 := token_make("kw_enum", "enum", 0, 4)
+    t2 := token_make("ident", "Color", 5, 10)
+    stream := t1 + "\n" + t2
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_ENUM_DECL(), "name=Color")
+    assert_eq(got, expected)
+
+test parse_enum_decl_pub
+    t1 := token_make("kw_pub", "pub", 0, 3)
+    t2 := token_make("kw_enum", "enum", 4, 8)
+    t3 := token_make("ident", "Status", 9, 15)
+    stream := t1 + "\n" + t2 + "\n" + t3
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_ENUM_DECL(), "name=Status")
+    assert_eq(got, expected)
+
+test parse_import_decl_bare
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "core", 7, 11)
+    stream := t1 + "\n" + t2
+    got := parse_import_spec(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "core")
+    assert_eq(got, expected)
+
+test parse_import_decl_nested_path
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "compiler", 7, 15)
+    t3 := token_make("slash", "/", 15, 16)
+    t4 := token_make("ident", "syntax", 16, 22)
+    t5 := token_make("slash", "/", 22, 23)
+    t6 := token_make("ident", "token", 23, 28)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6
+    got := parse_import_spec(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "compiler/syntax/token")
+    assert_eq(got, expected)
+
+test parse_import_decl_braced_selectors
+    t1 := token_make("kw_import", "import", 0, 6)
+    t2 := token_make("ident", "compiler", 7, 15)
+    t3 := token_make("slash", "/", 15, 16)
+    t4 := token_make("ident", "diagnostics", 16, 27)
+    t5 := token_make("lbrace", "{", 28, 29)
+    t6 := token_make("ident", "message_is_error", 30, 46)
+    t7 := token_make("comma", ",", 46, 47)
+    t8 := token_make("ident", "format_error", 48, 60)
+    t9 := token_make("rbrace", "}", 61, 62)
+    stream := t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6 + "\n" + t7 + "\n" + t8 + "\n" + t9
+    got := parse_import_spec(stream, 0)
+    expected := node_make(NODE_IMPORT_DECL(), "compiler/diagnostics{message_is_error,format_error}")
+    assert_eq(got, expected)
+
+test parse_test_decl_basic
+    t1 := token_make("kw_test", "test", 0, 4)
+    t2 := token_make("ident", "my_feature", 5, 15)
+    stream := t1 + "\n" + t2
+    got := parse_top_level_decl(stream, 0)
+    expected := node_make(NODE_TEST_DECL(), "name=my_feature")
+    assert_eq(got, expected)
+
+test parse_test_decl_empty_name
+    t1 := token_make("kw_test", "test", 0, 4)
+    stream := t1
+    got := parse_top_level_decl(stream, 0)
+    assert_eq(got, "")
+
+test parse_import_decl_empty_path
+    t1 := token_make("kw_import", "import", 0, 6)
+    stream := t1
+    got := parse_import_spec(stream, 0)
+    assert_eq(got, "")

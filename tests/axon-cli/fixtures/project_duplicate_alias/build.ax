@@ -1,0 +1,5 @@
+project duplicate_alias
+    version: "0.1.0"
+
+bin duplicate_alias
+    main: "./src/main.ax"

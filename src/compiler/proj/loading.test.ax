@@ -1,14 +1,139 @@
+import
+    compiler/proj/build_file {
+        describe_project,
+        parse_build_manifest
+    }
+    compiler/proj/module_graph {
+        list_compiler_modules,
+        build_module_graph,
+        build_full_module_graph,
+        list_module_top_level
+    }
+    compiler/proj/discover {
+        discover_entry,
+        classify_file_pair,
+        import_path_to_file_path,
+        discover_source_files,
+        classify_source_file,
+        discover_modules_in_path,
+        discover_project_root,
+        check_project_has_manifest,
+        check_project_has_source_dir,
+        check_main_entry_exists,
+        collect_all_source_files,
+        collect_app_files,
+        collect_test_files,
+        collect_sidecar_files,
+        module_name_for_file
+    }
+    compiler/proj/targets {
+        resolve_check_target,
+        resolve_test_target
+    }
+
 test describe_project_returns_manifest_info
     assert_eq(describe_project(), "project:axon bin:axon main:./src/main.ax")
 
 test list_compiler_modules_returns_layout
-    assert_eq(list_compiler_modules(), "compiler/entry,compiler/pipeline_check,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/complex_types/string,compiler/complex_types/array,compiler/ir/ir,compiler/ir/lower,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge")
+    assert_eq(list_compiler_modules(), "compiler/entry,compiler/pipeline_check,compiler/pipeline_check/test_orchestrate,compiler/diagnostics/diagnostic,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/types/composites/string,compiler/types/composites/array,compiler/ir/ir,compiler/ir/lower,compiler/ir/lower_project,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/backend/native_codegen,compiler/backend/foreign_archive,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge")
 
 test discover_entry_returns_main_path
     assert_eq(discover_entry(), "./src/main.ax")
+
+test discover_classify_has_sidecar
+    result := classify_file_pair("src/compiler/proj/discover.ax")
+    assert_eq(result, "has-sidecar")
+
+test discover_classify_pure_axon
+    result := classify_file_pair("src/compiler/proj/build_file.ax")
+    assert_eq(result, "pure-axon")
+
+test discover_import_path_to_file_direct
+    result := import_path_to_file_path("compiler/proj/build_file")
+    assert_eq(result, "src/compiler/proj/build_file.ax")
+
+test discover_import_path_to_dir_module
+    result := import_path_to_file_path("compiler/proj")
+    assert_eq(string_contains(result, "src/compiler/proj"), true)
+
+test discover_import_path_not_found
+    result := import_path_to_file_path("nonexistent/module")
+    assert_eq(result, "not-found")
 
 test resolve_check_target_returns_project_scope
     assert_eq(resolve_check_target(""), "project")
 
 test resolve_test_target_returns_project_scope
     assert_eq(resolve_test_target(""), "test:project")
+
+test discover_project_has_manifest
+    assert_eq(check_project_has_manifest(), "ok")
+
+test discover_project_has_source_dir
+    assert_eq(check_project_has_source_dir(), "ok")
+
+test discover_main_entry_exists
+    assert_eq(check_main_entry_exists(), "ok")
+
+test classify_source_file_test
+    assert_eq(classify_source_file("foo.test.ax"), "test")
+
+test classify_source_file_app
+    assert_eq(classify_source_file("foo.ax"), "app")
+
+test module_name_for_file_src_ax
+    assert_eq(module_name_for_file("src/compiler/proj/build_file.ax"), "compiler/proj/build_file")
+
+test module_name_for_file_test_ax
+    assert_eq(module_name_for_file("src/compiler/proj/build_file.test.ax"), "compiler/proj/build_file")
+
+test module_name_for_file_no_prefix
+    assert_eq(module_name_for_file("compiler/syntax/lexer.ax"), "compiler/syntax/lexer")
+
+test collect_all_source_files_returns_content
+    files := collect_all_source_files(".")
+    assert_eq(axon_string_starts_with(files, "error:"), false)
+    assert_eq(string_contains(files, "src/main.ax"), true)
+
+test collect_app_files_returns_content
+    files := collect_app_files(".")
+    assert_eq(axon_string_starts_with(files, "error:"), false)
+    assert_eq(string_contains(files, "main.ax"), true)
+
+test collect_test_files_finds_tests
+    files := collect_test_files(".")
+    assert_eq(axon_string_starts_with(files, "error:"), false)
+    assert_eq(string_contains(files, ".test.ax"), true)
+
+test collect_sidecar_files_finds_rust
+    files := collect_sidecar_files(".")
+    assert_eq(axon_string_starts_with(files, "error:"), false)
+    assert_eq(string_contains(files, ".rs"), true)
+
+test build_module_graph_returns_modules
+    graph := build_module_graph(".")
+    assert_eq(axon_string_starts_with(graph, "error:"), false)
+    assert_eq(string_contains(graph, "compiler/proj/build_file"), true)
+    assert_eq(string_contains(graph, "compiler/proj/discover"), true)
+
+test build_full_module_graph_returns_header
+    graph := build_full_module_graph(".")
+    assert_eq(axon_string_starts_with(graph, "error:"), false)
+    assert_eq(string_contains(graph, "graph:axon"), true)
+    assert_eq(string_contains(graph, "modules:"), true)
+    assert_eq(string_contains(graph, "test_files:"), true)
+    assert_eq(string_contains(graph, "sidecars:"), true)
+
+test list_module_top_level_returns_symbols
+    symbols := list_module_top_level("compiler/proj/build_file")
+    assert_eq(string_contains(symbols, "describe_project"), true)
+    assert_eq(string_contains(symbols, "parse_build_manifest"), true)
+    assert_eq(string_contains(symbols, "extract_project_name"), true)
+
+test list_module_top_level_unknown_returns_empty
+    symbols := list_module_top_level("nonexistent/module")
+    assert_eq(symbols, "")
+
+test discover_modules_in_path_returns_list
+    mods := discover_modules_in_path("src")
+    assert_eq(string_contains(mods, "compiler/proj/build_file"), true)

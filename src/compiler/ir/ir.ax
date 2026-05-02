@@ -334,13 +334,15 @@ func mir_extract_prefix(s: String) String
     return axon_string_sub(s, 0, idx)
 
 func mir_find_colon(s: String, start: i64) i64
-    mut i: i64 = start
     len := axon_string_count(s, "")
-    while i < len:
-        if axon_string_char_at(s, i) == ":":
-            return i
-        i = i + 1
-    return len
+    return mir_find_colon_rec(s, start, len)
+
+func mir_find_colon_rec(s: String, pos: i64, len: i64) i64
+    if pos >= len:
+        return len
+    if axon_string_char_at(s, pos) == ":":
+        return pos
+    return mir_find_colon_rec(s, pos + 1, len)
 
 // --- Legacy placeholders ---
 

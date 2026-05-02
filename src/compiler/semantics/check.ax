@@ -1,3 +1,8 @@
+import
+    compiler/types/composites/string { string_len }
+    compiler/semantics/lint { run_axon_lints }
+    compiler/semantics/resolve { check_match_exhaustiveness_axon }
+
 pub func run_semantic_check_for_source(source: String) String
     return axon_semantic_check(source)
 
@@ -9,3 +14,48 @@ pub func check_return_types_axon(source: String) String
 
 pub func collect_symbols_axon(source: String) String
     return resolve_symbol_arity(source)
+
+// Chained full semantic check: runs all Axon-native checks in sequence.
+// Returns "ok:full-semantic" on success or the first error encountered.
+pub func run_full_semantic_check(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return "ok:full-semantic:empty"
+
+    // 1. Duplicate declarations
+    dup_err := check_duplicate_declarations_axon(source)
+    if string_len(dup_err) > 0:
+        return dup_err
+
+    // 2. Unresolved imports
+    import_err := check_imports(source)
+    if string_len(import_err) > 0 and import_err != "ok:semantic-snippet":
+        // check_imports returns ok or errors
+        if axon_string_starts_with(import_err, "error"):
+            return import_err
+
+    // 3. Duplicate braced imports
+    dup_import_err := check_duplicate_braced_imports(source)
+    if string_len(dup_import_err) > 0:
+        return dup_import_err
+
+    // 4. Import collision with local declarations
+    collision_err := check_import_collision_axon(source)
+    if string_len(collision_err) > 0:
+        return collision_err
+
+    // 5. Core semantic check (arity, unresolved symbols, type mismatches)
+    core_err := axon_semantic_check(source)
+    if axon_string_starts_with(core_err, "error"):
+        return core_err
+
+    // 5b. Match exhaustiveness (stub until typechecker owns match typing)
+    match_err := check_match_exhaustiveness_axon(source)
+    if string_len(match_err) > 0:
+        return match_err
+
+    // 6. Axon-owned lints (placeholder; expands in Phase 5)
+    lint_err := run_axon_lints(source)
+    if axon_string_starts_with(lint_err, "error"):
+        return lint_err
+
+    return "ok:full-semantic"

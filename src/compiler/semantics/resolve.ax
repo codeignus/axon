@@ -1,5 +1,17 @@
 import
-    compiler/complex_types/string { string_len }
+    compiler/types/composites/string { string_len, string_contains }
+
+func resolve_count_lines(source: String) i64
+    if string_len(source) == 0:
+        return 0
+    return resolve_count_lines_rec(source, 0, 1)
+
+func resolve_count_lines_rec(source: String, pos: i64, count: i64) i64
+    if pos >= string_len(source):
+        return count
+    if axon_string_char_at(source, pos) == "\n":
+        return resolve_count_lines_rec(source, pos + 1, count + 1)
+    return resolve_count_lines_rec(source, pos + 1, count)
 
 func scan_import_lines(source: String, idx: i64, total: i64, in_import: bool, errors: String) String
     if idx >= total:
@@ -13,16 +25,22 @@ func scan_import_lines(source: String, idx: i64, total: i64, in_import: bool, er
     if string_len(trimmed) == 0 or axon_string_starts_with(trimmed, "func ") or axon_string_starts_with(trimmed, "pub func ") or axon_string_starts_with(trimmed, "test "):
         return scan_import_lines(source, idx + 1, total, false, errors)
     brace_idx := find_char(trimmed, "{")
-    mut path_part := ""
-    if brace_idx >= 0:
-        path_part = axon_string_trim(axon_string_sub(trimmed, 0, brace_idx))
-    else:
-        path_part = axon_string_trim(trimmed)
+    path_part := resolve_path_part(trimmed, brace_idx)
     if string_len(path_part) > 0:
         if axon_import_path_exists(path_part) == false:
             new_err := "error: unresolved import '" + path_part + "'"
             return scan_import_lines(source, idx + 1, total, true, errors + new_err + "\n")
     return scan_import_lines(source, idx + 1, total, true, errors)
+
+func resolve_path_part(trimmed: String, brace_idx: i64) String
+    if brace_idx >= 0:
+        return axon_string_trim(axon_string_sub(trimmed, 0, brace_idx))
+    return axon_string_trim(trimmed)
+
+func resolve_symbols(inner: String, close_brace: i64) String
+    if close_brace >= 0:
+        return axon_string_sub(inner, 0, close_brace)
+    return inner
 
 func collect_import_symbols(source: String, idx: i64, total: i64, in_import: bool, acc: String) String
     if idx >= total:
@@ -39,11 +57,7 @@ func collect_import_symbols(source: String, idx: i64, total: i64, in_import: boo
     if brace_idx >= 0:
         inner := axon_string_sub(trimmed, brace_idx + 1, string_len(trimmed) - brace_idx - 1)
         close_brace := find_char(inner, "}")
-        mut symbols := ""
-        if close_brace >= 0:
-            symbols = axon_string_sub(inner, 0, close_brace)
-        else:
-            symbols = inner
+        symbols := resolve_symbols(inner, close_brace)
         return collect_import_symbols(source, idx + 1, total, true, acc + symbols + ",")
     return collect_import_symbols(source, idx + 1, total, true, acc)
 
@@ -68,7 +82,7 @@ pub func check_duplicate_names(source: String) String
 pub func check_imports(source: String) String
     if string_len(axon_string_trim(source)) == 0:
         return "ok:semantic-snippet:empty"
-    errors := scan_import_lines(source, 0, count_lines(source), false, "")
+    errors := scan_import_lines(source, 0, resolve_count_lines(source), false, "")
     if string_len(errors) > 0:
         return errors
     return axon_semantic_check(source)
@@ -77,7 +91,761 @@ pub func check_duplicate_declarations(source: String) String
     return axon_semantic_check(source)
 
 pub func resolve_import_names(source: String) String
-    return collect_import_symbols(source, 0, count_lines(source), false, "")
+    return collect_import_symbols(source, 0, resolve_count_lines(source), false, "")
 
 pub func resolve_symbol_arity(source: String) String
-    return scan_arity_entries(source, 0, count_lines(source), "")
+    return scan_arity_entries(source, 0, resolve_count_lines(source), "")
+
+pub func check_duplicate_braced_imports(source: String) String
+    symbols := collect_import_symbols(source, 0, resolve_count_lines(source), false, "")
+    return check_sym_list_for_dups(symbols, 0, "", "")
+
+func check_sym_list_for_dups(symbols: String, pos: i64, seen: String, errors: String) String
+    part := next_comma_part(symbols, pos)
+    if string_len(part) == 0:
+        return errors
+    sym := axon_string_trim(part)
+    if string_len(sym) > 0:
+        if sym_in_seen(seen, sym, 0) == true:
+            new_err := "error: duplicate import '" + sym + "'\n"
+            return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), seen, errors + new_err)
+        if string_len(seen) == 0:
+            return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), sym, errors)
+        return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), seen + "|" + sym, errors)
+    return check_sym_list_for_dups(symbols, advance_past_comma(symbols, pos), seen, errors)
+
+func next_comma_part(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    return scan_to_comma(s, pos)
+
+func scan_to_comma(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if c == ",":
+        return ""
+    return c + scan_to_comma(s, pos + 1)
+
+func advance_past_comma(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return pos
+    c := axon_string_char_at(s, pos)
+    if c == ",":
+        return pos + 1
+    return advance_past_comma(s, pos + 1)
+
+func sym_in_seen(seen: String, sym: String, pos: i64) bool
+    if string_len(seen) == 0:
+        return false
+    part := next_pipe_part(seen, pos)
+    if string_len(part) == 0:
+        return false
+    if part == sym:
+        return true
+    return sym_in_seen(seen, sym, advance_past_pipe(seen, pos))
+
+func next_pipe_part(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    return scan_to_pipe(s, pos)
+
+func scan_to_pipe(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if c == "|":
+        return ""
+    return c + scan_to_pipe(s, pos + 1)
+
+func advance_past_pipe(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return pos
+    c := axon_string_char_at(s, pos)
+    if c == "|":
+        return pos + 1
+    return advance_past_pipe(s, pos + 1)
+
+// --- Declaration kind detection helpers ---
+
+func is_top_level_decl_line(line: String) bool
+    if axon_string_starts_with(line, "func "):
+        return true
+    if axon_string_starts_with(line, "pub func "):
+        return true
+    if axon_string_starts_with(line, "struct "):
+        return true
+    if axon_string_starts_with(line, "pub struct "):
+        return true
+    if axon_string_starts_with(line, "enum "):
+        return true
+    if axon_string_starts_with(line, "pub enum "):
+        return true
+    if axon_string_starts_with(line, "trait "):
+        return true
+    if axon_string_starts_with(line, "pub trait "):
+        return true
+    if axon_string_starts_with(line, "error "):
+        return true
+    if axon_string_starts_with(line, "pub error "):
+        return true
+    if axon_string_starts_with(line, "type "):
+        return true
+    if axon_string_starts_with(line, "pub type "):
+        return true
+    return false
+
+func parse_decl_name_from_line(line: String) String
+    rest := parse_decl_strip_pub(line)
+    if axon_string_starts_with(rest, "func "):
+        return take_ident_safe(axon_string_sub(rest, 5, string_len(rest) - 5))
+    if axon_string_starts_with(rest, "struct "):
+        return take_ident_safe(axon_string_sub(rest, 7, string_len(rest) - 7))
+    if axon_string_starts_with(rest, "enum "):
+        return take_ident_safe(axon_string_sub(rest, 5, string_len(rest) - 5))
+    if axon_string_starts_with(rest, "trait "):
+        return take_ident_safe(axon_string_sub(rest, 6, string_len(rest) - 6))
+    if axon_string_starts_with(rest, "error "):
+        return take_ident_safe(axon_string_sub(rest, 6, string_len(rest) - 6))
+    if axon_string_starts_with(rest, "type "):
+        return take_ident_safe(axon_string_sub(rest, 5, string_len(rest) - 5))
+    return ""
+
+func parse_decl_strip_pub(line: String) String
+    if axon_string_starts_with(line, "pub "):
+        return axon_string_sub(line, 4, string_len(line) - 4)
+    return line
+
+func take_ident_safe(s: String) String
+    return take_ident_step(s, 0)
+
+func take_ident_step(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if is_ident_char(c):
+        return c + take_ident_step(s, pos + 1)
+    return ""
+
+func parse_decl_kind_from_line(line: String) String
+    if axon_string_starts_with(line, "func ") or axon_string_starts_with(line, "pub func "):
+        return "func"
+    if axon_string_starts_with(line, "struct ") or axon_string_starts_with(line, "pub struct "):
+        return "struct"
+    if axon_string_starts_with(line, "enum ") or axon_string_starts_with(line, "pub enum "):
+        return "enum"
+    if axon_string_starts_with(line, "trait ") or axon_string_starts_with(line, "pub trait "):
+        return "trait"
+    if axon_string_starts_with(line, "error ") or axon_string_starts_with(line, "pub error "):
+        return "error"
+    if axon_string_starts_with(line, "type ") or axon_string_starts_with(line, "pub type "):
+        return "type"
+    return ""
+
+func is_pub_decl(line: String) bool
+    return axon_string_starts_with(line, "pub ")
+
+// --- check_duplicate_declarations: scan for duplicate func/struct/enum/trait/error/type ---
+
+func scan_duplicate_decls(source: String, idx: i64, total: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_top_level_decl_line(trimmed):
+        name := parse_decl_name_from_line(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                kind := parse_decl_kind_from_line(trimmed)
+                new_err := "error: duplicate " + kind + " '" + name + "'\n"
+                return scan_duplicate_decls(source, idx + 1, total, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_duplicate_decls(source, idx + 1, total, "|" + name + "|", errors)
+            return scan_duplicate_decls(source, idx + 1, total, seen + name + "|", errors)
+    return scan_duplicate_decls(source, idx + 1, total, seen, errors)
+
+// --- check_self_import: reject imports referencing the current module ---
+
+func scan_self_import(source: String, idx: i64, total: i64, in_import: bool, current_module: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if trimmed == "import":
+        return scan_self_import(source, idx + 1, total, true, current_module, errors)
+    if in_import == false:
+        return scan_self_import(source, idx + 1, total, false, current_module, errors)
+    if string_len(trimmed) == 0 or axon_string_starts_with(trimmed, "func ") or axon_string_starts_with(trimmed, "pub func ") or axon_string_starts_with(trimmed, "test "):
+        return scan_self_import(source, idx + 1, total, false, current_module, errors)
+    brace_idx := find_char(trimmed, "{")
+    path_part := resolve_path_part(trimmed, brace_idx)
+    if string_len(path_part) > 0 and string_len(current_module) > 0:
+        if path_part == current_module:
+            new_err := "error: self-import '" + path_part + "'\n"
+            return scan_self_import(source, idx + 1, total, true, current_module, errors + new_err)
+    return scan_self_import(source, idx + 1, total, true, current_module, errors)
+
+// --- check_import_collision: detect when an imported symbol collides with a local declaration ---
+
+func collect_local_decl_names(source: String, idx: i64, total: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_top_level_decl_line(trimmed):
+        name := parse_decl_name_from_line(trimmed)
+        if string_len(name) > 0:
+            if string_len(acc) == 0:
+                return collect_local_decl_names(source, idx + 1, total, "|" + name + "|")
+            return collect_local_decl_names(source, idx + 1, total, acc + name + "|")
+    return collect_local_decl_names(source, idx + 1, total, acc)
+
+func check_collision_of_symbols(imported: String, local_decls: String, errors: String) String
+    sym := next_comma_part(imported, 0)
+    if string_len(sym) == 0:
+        return errors
+    trimmed := axon_string_trim(sym)
+    if string_len(trimmed) > 0:
+        if name_in_seen(local_decls, trimmed):
+            new_err := "error: import '" + trimmed + "' collides with local declaration\n"
+            return check_collision_of_symbols_rest(imported, advance_past_comma(imported, 0), local_decls, errors + new_err)
+    return check_collision_of_symbols_rest(imported, advance_past_comma(imported, 0), local_decls, errors)
+
+func check_collision_of_symbols_rest(imported: String, pos: i64, local_decls: String, errors: String) String
+    if pos >= string_len(imported):
+        return errors
+    sym := next_comma_part(imported, pos)
+    if string_len(sym) == 0:
+        return errors
+    trimmed := axon_string_trim(sym)
+    if string_len(trimmed) > 0:
+        if name_in_seen(local_decls, trimmed):
+            new_err := "error: import '" + trimmed + "' collides with local declaration\n"
+            return check_collision_of_symbols_rest(imported, advance_past_comma(imported, pos), local_decls, errors + new_err)
+    return check_collision_of_symbols_rest(imported, advance_past_comma(imported, pos), local_decls, errors)
+
+// --- check_visibility: detect when a non-pub symbol is accessed from outside ---
+
+// Build a simple symbol table entry: name:kind:pub (1=pub, 0=private)
+func scan_symbol_entry(source: String, idx: i64, total: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_top_level_decl_line(trimmed):
+        name := parse_decl_name_from_line(trimmed)
+        kind := parse_decl_kind_from_line(trimmed)
+        pub_flag := "0"
+        if is_pub_decl(trimmed):
+            pub_flag = "1"
+        if string_len(name) > 0 and string_len(kind) > 0:
+            entry := name + ":" + kind + ":" + pub_flag
+            if string_len(acc) > 0:
+                return scan_symbol_entry(source, idx + 1, total, acc + "," + entry)
+            return scan_symbol_entry(source, idx + 1, total, entry)
+    return scan_symbol_entry(source, idx + 1, total, acc)
+
+func extract_sym_name(entry: String) String
+    colon := find_char(entry, ":")
+    if colon < 0:
+        return entry
+    return axon_string_sub(entry, 0, colon)
+
+func extract_sym_pub(entry: String) String
+    // entry is "name:kind:pub_flag" — return the last component
+    first_colon := find_char(entry, ":")
+    if first_colon < 0:
+        return "0"
+    after_first := axon_string_sub(entry, first_colon + 1, string_len(entry) - first_colon - 1)
+    second_colon := find_char(after_first, ":")
+    if second_colon < 0:
+        return "0"
+    return axon_string_sub(after_first, second_colon + 1, string_len(after_first) - second_colon - 1)
+
+func is_sym_pub_in_table(table: String, name: String, idx: i64) bool
+    entry := get_nth_csv(table, idx)
+    if string_len(entry) == 0:
+        return false
+    sym_name := extract_sym_name(entry)
+    if sym_name == name:
+        pub_flag := extract_sym_pub(entry)
+        if pub_flag == "1":
+            return true
+        return false
+    return is_sym_pub_in_table(table, name, idx + 1)
+
+func check_vis_for_call(table: String, callee: String) String
+    found := is_sym_pub_in_table(table, callee, 0)
+    // If the symbol is in the table and not pub, it's a visibility violation
+    // But if it's not in the table, it could be an FFI/builtin — not a vis issue
+    if found == false:
+        // Need to check if the name exists at all in the table
+        if sym_exists_in_table(table, callee, 0):
+            return "error: '" + callee + "' is not public (private access)\n"
+    return ""
+
+func sym_exists_in_table(table: String, name: String, idx: i64) bool
+    entry := get_nth_csv(table, idx)
+    if string_len(entry) == 0:
+        return false
+    sym_name := extract_sym_name(entry)
+    if sym_name == name:
+        return true
+    return sym_exists_in_table(table, name, idx + 1)
+
+// --- resolve_all_imports: full import resolution ---
+
+func scan_import_resolution(source: String, idx: i64, total: i64, in_import: bool, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if trimmed == "import":
+        return scan_import_resolution(source, idx + 1, total, true, errors)
+    if in_import == false:
+        return scan_import_resolution(source, idx + 1, total, false, errors)
+    if string_len(trimmed) == 0 or axon_string_starts_with(trimmed, "func ") or axon_string_starts_with(trimmed, "pub func ") or axon_string_starts_with(trimmed, "test "):
+        return scan_import_resolution(source, idx + 1, total, false, errors)
+    brace_idx := find_char(trimmed, "{")
+    path_part := resolve_path_part(trimmed, brace_idx)
+    if string_len(path_part) > 0:
+        if axon_import_path_exists(path_part) == false:
+            new_err := "error: unresolved import '" + path_part + "'\n"
+            return scan_import_resolution(source, idx + 1, total, true, errors + new_err)
+    if brace_idx >= 0:
+        inner := axon_string_sub(trimmed, brace_idx + 1, string_len(trimmed) - brace_idx - 1)
+        close_brace := find_char(inner, "}")
+        symbols := resolve_symbols(inner, close_brace)
+        dup_err := check_inline_dup_symbols(symbols, 0, "|", "")
+        if string_len(dup_err) > 0:
+            return scan_import_resolution(source, idx + 1, total, true, errors + dup_err)
+    return scan_import_resolution(source, idx + 1, total, true, errors)
+
+func check_inline_dup_symbols(symbols: String, pos: i64, seen: String, errors: String) String
+    part := next_comma_part(symbols, pos)
+    if string_len(part) == 0:
+        return errors
+    sym := axon_string_trim(part)
+    if string_len(sym) > 0:
+        if name_in_seen(seen, sym):
+            new_err := "error: duplicate import '" + sym + "'\n"
+            return check_inline_dup_symbols(symbols, advance_past_comma(symbols, pos), seen, errors + new_err)
+        return check_inline_dup_symbols(symbols, advance_past_comma(symbols, pos), seen + sym + "|", errors)
+    return check_inline_dup_symbols(symbols, advance_past_comma(symbols, pos), seen, errors)
+
+// --- Public API functions ---
+
+pub func check_duplicate_declarations_axon(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_duplicate_decls(source, 0, resolve_count_lines(source), "|", "")
+
+pub func check_self_import_axon(source: String, current_module: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_self_import(source, 0, resolve_count_lines(source), false, current_module, "")
+
+pub func check_import_collision_axon(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    imported := collect_import_symbols(source, 0, resolve_count_lines(source), false, "")
+    local_decls := collect_local_decl_names(source, 0, resolve_count_lines(source), "|")
+    return check_collision_of_symbols(imported, local_decls, "")
+
+pub func check_visibility_axon(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    table := build_symbol_table_axon(source)
+    num_lines := resolve_count_lines(source)
+    return scan_vis_lines(source, table, 0, num_lines, "")
+
+func scan_vis_lines(source: String, table: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_top_level_decl_line(trimmed):
+        return scan_vis_lines(source, table, idx + 1, total, errors)
+    callee := parse_call_name_from_line(trimmed)
+    if string_len(callee) > 0:
+        vis_err := check_vis_for_call(table, callee)
+        if string_len(vis_err) > 0:
+            return scan_vis_lines(source, table, idx + 1, total, errors + vis_err)
+    return scan_vis_lines(source, table, idx + 1, total, errors)
+
+pub func build_symbol_table_axon(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_symbol_entry(source, 0, resolve_count_lines(source), "")
+
+pub func resolve_all_imports_axon(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return "ok:resolve:empty"
+    errors := scan_import_resolution(source, 0, resolve_count_lines(source), false, "")
+    if string_len(errors) > 0:
+        return errors
+    return "ok:resolve"
+
+// --- Member duplicate detection ---
+
+func indent_level(line: String) i64
+    return count_leading_spaces(line, 0)
+
+func count_leading_spaces(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return pos
+    c := axon_string_char_at(s, pos)
+    if c == " ":
+        return count_leading_spaces(s, pos + 1)
+    return pos
+
+func is_at_indent(line: String, expected: i64) bool
+    return indent_level(line) == expected
+
+func extract_member_name(line: String) String
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) == 0:
+        return ""
+    // extract name before colon or open paren, or take whole ident
+    colon_pos := find_char(trimmed, ":")
+    paren_pos := find_char(trimmed, "(")
+    if colon_pos > 0 && (paren_pos < 0 || colon_pos < paren_pos):
+        return axon_string_trim(axon_string_sub(trimmed, 0, colon_pos))
+    if paren_pos > 0:
+        return axon_string_trim(axon_string_sub(trimmed, 0, paren_pos))
+    return take_ident_safe(trimmed)
+
+func is_struct_decl_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "struct ") || axon_string_starts_with(trimmed, "pub struct ")
+
+func is_enum_decl_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "enum ") || axon_string_starts_with(trimmed, "pub enum ")
+
+func is_trait_decl_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "trait ") || axon_string_starts_with(trimmed, "pub trait ")
+
+// --- struct member duplicate detection ---
+
+func scan_struct_members(source: String, idx: i64, total: i64, struct_start: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) > 0 && is_at_indent(line, 0) && idx > struct_start:
+        return errors
+    if string_len(trimmed) == 0:
+        return scan_struct_members(source, idx + 1, total, struct_start, seen, errors)
+    ind := indent_level(line)
+    if ind > 0 && idx > struct_start:
+        name := extract_member_name(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                new_err := "error: duplicate struct field '" + name + "'\n"
+                return scan_struct_members(source, idx + 1, total, struct_start, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_struct_members(source, idx + 1, total, struct_start, "|" + name + "|", errors)
+            return scan_struct_members(source, idx + 1, total, struct_start, seen + name + "|", errors)
+    return scan_struct_members(source, idx + 1, total, struct_start, seen, errors)
+
+func scan_for_struct_dupes(source: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_struct_decl_line(trimmed):
+        member_errs := scan_struct_members(source, idx + 1, total, idx, "|", "")
+        return scan_for_struct_dupes(source, idx + 1, total, errors + member_errs)
+    return scan_for_struct_dupes(source, idx + 1, total, errors)
+
+pub func check_struct_member_duplicates(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_for_struct_dupes(source, 0, resolve_count_lines(source), "")
+
+// --- enum variant duplicate detection ---
+
+func scan_enum_variants(source: String, idx: i64, total: i64, enum_start: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) > 0 && is_at_indent(line, 0) && idx > enum_start:
+        return errors
+    if string_len(trimmed) == 0:
+        return scan_enum_variants(source, idx + 1, total, enum_start, seen, errors)
+    ind := indent_level(line)
+    if ind > 0 && idx > enum_start:
+        name := extract_member_name(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                new_err := "error: duplicate enum variant '" + name + "'\n"
+                return scan_enum_variants(source, idx + 1, total, enum_start, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_enum_variants(source, idx + 1, total, enum_start, "|" + name + "|", errors)
+            return scan_enum_variants(source, idx + 1, total, enum_start, seen + name + "|", errors)
+    return scan_enum_variants(source, idx + 1, total, enum_start, seen, errors)
+
+func scan_for_enum_dupes(source: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_enum_decl_line(trimmed):
+        member_errs := scan_enum_variants(source, idx + 1, total, idx, "|", "")
+        return scan_for_enum_dupes(source, idx + 1, total, errors + member_errs)
+    return scan_for_enum_dupes(source, idx + 1, total, errors)
+
+pub func check_enum_variant_duplicates(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_for_enum_dupes(source, 0, resolve_count_lines(source), "")
+
+// --- trait method duplicate detection ---
+
+func scan_trait_methods(source: String, idx: i64, total: i64, trait_start: i64, seen: String, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if string_len(trimmed) > 0 && is_at_indent(line, 0) && idx > trait_start:
+        return errors
+    if string_len(trimmed) == 0:
+        return scan_trait_methods(source, idx + 1, total, trait_start, seen, errors)
+    ind := indent_level(line)
+    if ind > 0 && idx > trait_start:
+        name := extract_member_name(trimmed)
+        if string_len(name) > 0:
+            if name_in_seen(seen, name):
+                new_err := "error: duplicate trait method '" + name + "'\n"
+                return scan_trait_methods(source, idx + 1, total, trait_start, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return scan_trait_methods(source, idx + 1, total, trait_start, "|" + name + "|", errors)
+            return scan_trait_methods(source, idx + 1, total, trait_start, seen + name + "|", errors)
+    return scan_trait_methods(source, idx + 1, total, trait_start, seen, errors)
+
+func scan_for_trait_dupes(source: String, idx: i64, total: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if is_trait_decl_line(trimmed):
+        member_errs := scan_trait_methods(source, idx + 1, total, idx, "|", "")
+        return scan_for_trait_dupes(source, idx + 1, total, errors + member_errs)
+    return scan_for_trait_dupes(source, idx + 1, total, errors)
+
+pub func check_trait_method_duplicates(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_for_trait_dupes(source, 0, resolve_count_lines(source), "")
+
+// --- method self-rule checking ---
+
+func is_impl_block_line(trimmed: String) bool
+    return axon_string_starts_with(trimmed, "impl ") || axon_string_starts_with(trimmed, "pub impl ")
+
+func find_close_paren_from(s: String, pos: i64) i64
+    if pos >= string_len(s):
+        return -1
+    if axon_string_char_at(s, pos) == ")":
+        return pos
+    return find_close_paren_from(s, pos + 1)
+
+func scan_to_comma_or_paren(s: String, pos: i64) String
+    if pos >= string_len(s):
+        return ""
+    c := axon_string_char_at(s, pos)
+    if c == "," || c == ")":
+        return ""
+    return c + scan_to_comma_or_paren(s, pos + 1)
+
+func extract_method_name_from_decl(line: String) String
+    if axon_string_starts_with(line, "func ") == false:
+        return ""
+    rest := axon_string_sub(line, 5, string_len(line) - 5)
+    return take_ident_safe(rest)
+
+func scan_impl_self_rules(source: String, idx: i64, total: i64, in_impl: i64, errors: String) String
+    if idx >= total:
+        return errors
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    ind := indent_level(line)
+    if is_impl_block_line(trimmed) && ind == 0:
+        return scan_impl_self_rules(source, idx + 1, total, idx, errors)
+    if in_impl >= 0 && ind == 0 && string_len(trimmed) > 0 && is_impl_block_line(trimmed) == false && is_at_indent(line, 0):
+        return scan_impl_self_rules(source, idx, total, -1, errors)
+    if in_impl >= 0 && ind > 0 && axon_string_starts_with(trimmed, "func "):
+        open := find_char(trimmed, "(")
+        if open >= 0:
+            close := find_close_paren_from(trimmed, open + 1)
+            if close >= 0:
+                params := axon_string_trim(axon_string_sub(trimmed, open + 1, close - open - 1))
+                if string_len(params) > 0:
+                    first := axon_string_trim(scan_to_comma_or_paren(params, 0))
+                    if axon_string_starts_with(first, "self") == false:
+                        mname := extract_method_name_from_decl(trimmed)
+                        new_err := "error: method '" + mname + "' in impl block must have 'self' as first parameter\n"
+                        return scan_impl_self_rules(source, idx + 1, total, in_impl, errors + new_err)
+    return scan_impl_self_rules(source, idx + 1, total, in_impl, errors)
+
+pub func check_method_self_rules(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_impl_self_rules(source, 0, resolve_count_lines(source), -1, "")
+
+// --- import alias conflict detection ---
+
+func split_ws_tokens(s: String, pos: i64, current: String, acc: String) String
+    if pos >= string_len(s):
+        if string_len(current) > 0:
+            if string_len(acc) == 0:
+                return current
+            return acc + "," + current
+        return acc
+    c := axon_string_char_at(s, pos)
+    if c == " " || c == "\t":
+        if string_len(current) > 0:
+            if string_len(acc) == 0:
+                return split_ws_tokens(s, pos + 1, "", current)
+            return split_ws_tokens(s, pos + 1, "", acc + "," + current)
+        return split_ws_tokens(s, pos + 1, "", acc)
+    return split_ws_tokens(s, pos + 1, current + c, acc)
+
+func count_pipe_entries(s: String, pos: i64) i64
+    return count_pipe_entries_rec(s, pos, 0)
+
+func count_pipe_entries_rec(s: String, pos: i64, count: i64) i64
+    if pos >= string_len(s):
+        return count + 1
+    if axon_string_char_at(s, pos) == "|":
+        return count_pipe_entries_rec(s, pos + 1, count + 1)
+    return count_pipe_entries_rec(s, pos + 1, count)
+
+func scan_import_alias_entries(source: String, idx: i64, total: i64, in_import: bool, acc: String) String
+    if idx >= total:
+        return acc
+    line := get_line(source, idx)
+    trimmed := axon_string_trim(line)
+    if trimmed == "import":
+        return scan_import_alias_entries(source, idx + 1, total, true, acc)
+    if in_import == false:
+        return scan_import_alias_entries(source, idx + 1, total, false, acc)
+    if string_len(trimmed) == 0 || axon_string_starts_with(trimmed, "func ") || axon_string_starts_with(trimmed, "pub func ") || axon_string_starts_with(trimmed, "test "):
+        return scan_import_alias_entries(source, idx + 1, total, false, acc)
+    brace_idx := find_char(trimmed, "{")
+    if brace_idx >= 0:
+        return scan_import_alias_entries(source, idx + 1, total, true, acc)
+    parts := split_ws_tokens(trimmed, 0, "", "")
+    num := count_pipe_entries(parts, 0)
+    if num == 2:
+        alias := get_nth_csv(parts, 1)
+        mod_path := get_nth_csv(parts, 0)
+        entry := alias + "=" + mod_path
+        if string_len(acc) == 0:
+            return scan_import_alias_entries(source, idx + 1, total, true, entry)
+        return scan_import_alias_entries(source, idx + 1, total, true, acc + "|" + entry)
+    return scan_import_alias_entries(source, idx + 1, total, true, acc)
+
+func check_alias_dups(aliases: String, pos: i64, seen: String, errors: String) String
+    entry := get_nth_csv(aliases, pos)
+    if string_len(entry) == 0:
+        return errors
+    eq := find_char(entry, "=")
+    if eq >= 0:
+        alias := axon_string_sub(entry, 0, eq)
+        if string_len(alias) > 0:
+            if name_in_seen(seen, alias):
+                mod_path := axon_string_sub(entry, eq + 1, string_len(entry) - eq - 1)
+                new_err := "error: duplicate import alias '" + alias + "' (from " + mod_path + ")\n"
+                return check_alias_dups(aliases, pos + 1, seen, errors + new_err)
+            if string_len(seen) == 0:
+                return check_alias_dups(aliases, pos + 1, "|" + alias + "|", errors)
+            return check_alias_dups(aliases, pos + 1, seen + alias + "|", errors)
+    return check_alias_dups(aliases, pos + 1, seen, errors)
+
+pub func check_import_alias_conflicts(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    aliases := scan_import_alias_entries(source, 0, resolve_count_lines(source), false, "")
+    if string_len(aliases) == 0:
+        return ""
+    return check_alias_dups(aliases, 0, "|", "")
+
+// --- resolve aliased imports ---
+
+pub func resolve_aliased_imports(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return ""
+    return scan_import_alias_entries(source, 0, resolve_count_lines(source), false, "")
+
+// --- type sigil helpers: ?T, T!, ?T! ---
+
+// Strip the ? prefix from a type string, returning (is_optional, inner_type)
+pub func unwrap_optional(type_str: String) String
+    if axon_string_starts_with(type_str, "?"):
+        inner := axon_string_sub(type_str, 1, string_len(type_str) - 1)
+        return "true|" + inner
+    return "false|" + type_str
+
+// Strip the ! postfix from a type string, returning (is_errorable, inner_type)
+pub func unwrap_errorable(type_str: String) String
+    if string_len(type_str) > 1 && axon_string_char_at(type_str, string_len(type_str) - 1) == "!":
+        inner := axon_string_sub(type_str, 0, string_len(type_str) - 1)
+        return "true|" + inner
+    return "false|" + type_str
+
+// Classify a type string into its sigil composition
+// Returns: "plain" | "optional" | "errorable" | "optional_errorable"
+pub func classify_type_sigil(type_str: String) String
+    has_q := axon_string_starts_with(type_str, "?")
+    has_bang := string_len(type_str) > 1 && axon_string_char_at(type_str, string_len(type_str) - 1) == "!"
+    if has_q && has_bang:
+        return "optional_errorable"
+    if has_q:
+        return "optional"
+    if has_bang:
+        return "errorable"
+    return "plain"
+
+// Get the inner type (strip both ? prefix and ! postfix)
+pub func strip_type_sigils(type_str: String) String
+    stripped := type_str
+    if axon_string_starts_with(stripped, "?"):
+        stripped := axon_string_sub(stripped, 1, string_len(stripped) - 1)
+    if string_len(stripped) > 1 && axon_string_char_at(stripped, string_len(stripped) - 1) == "!":
+        stripped := axon_string_sub(stripped, 0, string_len(stripped) - 1)
+    return stripped
+
+// Check match arm compatibility: given a matched type's sigil class,
+// return the allowed arm set as a comma-separated string
+pub func allowed_match_arms(sigil_class: String) String
+    if sigil_class == "optional":
+        return "value,nil"
+    if sigil_class == "errorable":
+        return "value,error"
+    if sigil_class == "optional_errorable":
+        return "value,nil,error"
+    return ""
+
+// Compute the residual type after a match with missing arms
+// Returns the result type sigil, or "T" if all handled
+// Phase 5: match exhaustiveness — full CFG analysis ports from reference typecheck; returns "" when no issue.
+pub func check_match_exhaustiveness_axon(source: String) String
+    return ""
+
+pub func match_residual_type(sigil_class: String, handled_arms: String) String
+    all := allowed_match_arms(sigil_class)
+    if all == "":
+        return "T"
+    has_value := string_contains(handled_arms, "value")
+    has_nil := string_contains(handled_arms, "nil")
+    has_error := string_contains(handled_arms, "error")
+    missing_nil := string_contains(all, "nil") && has_nil == false
+    missing_error := string_contains(all, "error") && has_error == false
+    if missing_nil && missing_error:
+        return "?T!"
+    if missing_nil:
+        return "?T"
+    if missing_error:
+        return "T!"
+    return "T"

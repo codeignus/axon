@@ -1,0 +1,5 @@
+project ambiguous_symbol
+    version: "0.1.0"
+
+bin ambiguous_symbol
+    main: "./src/main.ax"

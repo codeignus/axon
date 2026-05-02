@@ -14,7 +14,67 @@ pub func extract_binary_name(manifest: String) String
     return scan_for_prefix_value(manifest, "bin ")
 
 pub func extract_main_entry(manifest: String) String
-    return scan_for_prefix_value(manifest, "main:")
+    raw := scan_for_prefix_value(manifest, "main:")
+    return strip_optional_quotes(raw)
+
+pub func extract_version_field(manifest: String) String
+    raw := scan_for_prefix_value(manifest, "version:")
+    return strip_optional_quotes(raw)
+
+pub func manifest_has_rust_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "rust_deps")
+
+pub func manifest_has_go_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "go_deps")
+
+pub func manifest_has_python_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "python_deps")
+
+pub func manifest_has_deps(manifest: String) bool
+    total := axon_string_count(manifest, "\n") + 1
+    return manifest_line_has_kw(manifest, total, 0, "deps")
+
+pub func extract_deps_body(manifest: String, keyword: String) String
+    total := axon_string_count(manifest, "\n") + 1
+    line_idx := find_manifest_line_idx(manifest, total, 0, keyword)
+    if line_idx < 0:
+        return ""
+    rest := skip_n_lines(manifest, line_idx + 1)
+    return collect_indented_body(rest, "")
+
+func find_manifest_line_idx(manifest: String, total: i64, idx: i64, kw: String) i64
+    if idx >= total:
+        return -1
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if line == kw:
+        return idx
+    return find_manifest_line_idx(manifest, total, idx + 1, kw)
+
+func manifest_line_has_kw(manifest: String, total: i64, idx: i64, kw: String) bool
+    if idx >= total:
+        return false
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if line == kw:
+        return true
+    return manifest_line_has_kw(manifest, total, idx + 1, kw)
+
+func strip_optional_quotes(s: String) String
+    t := axon_string_trim(s)
+    if axon_string_count(t, "") < 2:
+        return t
+    first := axon_string_char_at(t, 0)
+    last_idx := axon_string_count(t, "") - 1
+    last := axon_string_char_at(t, last_idx)
+    if first == "\"" && last == "\"":
+        inner_len := axon_string_count(t, "") - 2
+        return axon_string_sub(t, 1, inner_len)
+    if first == "'" && last == "'":
+        inner_len := axon_string_count(t, "") - 2
+        return axon_string_sub(t, 1, inner_len)
+    return t
 
 func scan_for_prefix_value(manifest: String, prefix: String) String
     total := axon_string_count(manifest, "\n") + 1
@@ -49,3 +109,173 @@ func find_first_nl(s: String, pos: i64) i64
     if axon_string_char_at(s, pos) == "\n":
         return pos
     return find_first_nl(s, pos + 1)
+
+func skip_n_lines(s: String, n: i64) String
+    if n <= 0:
+        return s
+    if axon_string_count(s, "") == 0:
+        return ""
+    pos := find_first_nl(s, 0)
+    if pos < 0:
+        return ""
+    rest := axon_string_sub(s, pos + 1, axon_string_count(s, "") - pos - 1)
+    return skip_n_lines(rest, n - 1)
+
+func collect_indented_body(text: String, acc: String) String
+    if axon_string_count(text, "") == 0:
+        return acc
+    line := get_manifest_line(text, 0)
+    trimmed := axon_string_trim(line)
+    if axon_string_count(trimmed, "") == 0:
+        rest := skip_n_lines(text, 1)
+        if axon_string_count(rest, "") == 0:
+            return acc
+        next_line := axon_string_trim(get_manifest_line(rest, 0))
+        if axon_string_count(next_line, "") == 0:
+            return acc
+        first := axon_string_char_at(next_line, 0)
+        if first == " " or first == "\t":
+            return collect_indented_body(rest, acc)
+        return acc
+    first := axon_string_char_at(line, 0)
+    if first != " " and first != "\t":
+        return acc
+    dep_line := trimmed
+    if axon_string_count(acc, "") == 0:
+        return collect_indented_body(skip_n_lines(text, 1), dep_line)
+    return collect_indented_body(skip_n_lines(text, 1), string_concat(string_concat(acc, "\n"), dep_line))
+
+pub func parse_deps_entries(body: String) String
+    if axon_string_count(body, "") == 0:
+        return ""
+    total := axon_string_count(body, "\n") + 1
+    return parse_dep_lines(body, total, 0, "")
+
+func parse_dep_lines(body: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_manifest_line(body, idx))
+    if axon_string_count(line, "") == 0:
+        return parse_dep_lines(body, total, idx + 1, acc)
+    entry := parse_single_dep_entry(line)
+    if axon_string_count(entry, "") == 0:
+        return parse_dep_lines(body, total, idx + 1, acc)
+    if axon_string_count(acc, "") == 0:
+        return parse_dep_lines(body, total, idx + 1, entry)
+    return parse_dep_lines(body, total, idx + 1, string_concat(string_concat(acc, ","), entry))
+
+func parse_single_dep_entry(line: String) String
+    eq_pos := find_char_pos(line, "=", 0)
+    if eq_pos < 0:
+        return ""
+    name := axon_string_trim(axon_string_sub(line, 0, eq_pos))
+    rest := axon_string_trim(axon_string_sub(line, eq_pos + 1, axon_string_count(line, "") - eq_pos - 1))
+    version := extract_dep_version(rest)
+    return string_concat(string_concat(name, ":"), version)
+
+func find_char_pos(s: String, ch: String, pos: i64) i64
+    if pos >= axon_string_count(s, ""):
+        return -1
+    if axon_string_char_at(s, pos) == ch:
+        return pos
+    return find_char_pos(s, ch, pos + 1)
+
+func extract_dep_version(s: String) String
+    if axon_string_count(s, "") == 0:
+        return ""
+    first := axon_string_char_at(s, 0)
+    if first == "\"":
+        end := find_char_pos(s, "\"", 1)
+        if end < 0:
+            return s
+        return axon_string_sub(s, 1, end - 1)
+    if first == "{":
+        return extract_version_from_braces(s)
+    return s
+
+func extract_version_from_braces(s: String) String
+    kw_pos := find_substring(s, "version")
+    if kw_pos < 0:
+        return ""
+    after_kw := axon_string_sub(s, kw_pos + 7, axon_string_count(s, "") - kw_pos - 7)
+    trimmed := axon_string_trim(after_kw)
+    if axon_string_count(trimmed, "") == 0:
+        return ""
+    colon := axon_string_char_at(trimmed, 0)
+    if colon == ":":
+        trimmed = axon_string_trim(axon_string_sub(trimmed, 1, axon_string_count(trimmed, "") - 1))
+    if axon_string_count(trimmed, "") == 0:
+        return ""
+    eq := axon_string_char_at(trimmed, 0)
+    if eq == "=":
+        trimmed = axon_string_trim(axon_string_sub(trimmed, 1, axon_string_count(trimmed, "") - 1))
+    return extract_dep_version(trimmed)
+
+func find_substring(s: String, needle: String) i64
+    s_len := axon_string_count(s, "")
+    n_len := axon_string_count(needle, "")
+    if n_len > s_len:
+        return -1
+    return find_substring_at(s, needle, s_len, n_len, 0)
+
+func find_substring_at(s: String, needle: String, s_len: i64, n_len: i64, pos: i64) i64
+    if pos + n_len > s_len:
+        return -1
+    candidate := axon_string_sub(s, pos, n_len)
+    if candidate == needle:
+        return pos
+    return find_substring_at(s, needle, s_len, n_len, pos + 1)
+
+pub func parse_rust_deps_body(manifest: String) String
+    body := extract_deps_body(manifest, "rust_deps")
+    if axon_string_count(body, "") == 0:
+        return ""
+    return parse_deps_entries(body)
+
+pub func parse_go_deps_body(manifest: String) String
+    body := extract_deps_body(manifest, "go_deps")
+    if axon_string_count(body, "") == 0:
+        return ""
+    return parse_deps_entries(body)
+
+pub func parse_python_deps_body(manifest: String) String
+    body := extract_deps_body(manifest, "python_deps")
+    if axon_string_count(body, "") == 0:
+        return ""
+    return parse_deps_entries(body)
+
+// --- Multi-bin target support ---
+
+pub func extract_all_bin_targets(manifest: String) String
+    total := axon_string_count(manifest, "\n") + 1
+    return scan_bin_targets(manifest, total, 0, "")
+
+func scan_bin_targets(manifest: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if axon_string_starts_with(line, "bin "):
+        rest := axon_string_sub(line, 4, axon_string_count(line, "") - 4)
+        name := axon_string_trim(rest)
+        main_entry := scan_bin_main(manifest, total, idx + 1)
+        entry := string_concat(string_concat(name, ":"), main_entry)
+        if axon_string_count(acc, "") == 0:
+            return scan_bin_targets(manifest, total, idx + 1, entry)
+        return scan_bin_targets(manifest, total, idx + 1, string_concat(string_concat(acc, ","), entry))
+    return scan_bin_targets(manifest, total, idx + 1, acc)
+
+func scan_bin_main(manifest: String, total: i64, start: i64) String
+    return scan_bin_main_rec(manifest, total, start)
+
+func scan_bin_main_rec(manifest: String, total: i64, idx: i64) String
+    if idx >= total:
+        return "./src/main.ax"
+    line := axon_string_trim(get_manifest_line(manifest, idx))
+    if axon_string_starts_with(line, "main:"):
+        raw := axon_string_sub(line, 5, axon_string_count(line, "") - 5)
+        return strip_optional_quotes(axon_string_trim(raw))
+    if axon_string_count(line, "") > 0 && axon_string_starts_with(line, "bin ") == false && axon_string_starts_with(line, "main:") == false:
+        return scan_bin_main_rec(manifest, total, idx + 1)
+    if line == "":
+        return scan_bin_main_rec(manifest, total, idx + 1)
+    return "./src/main.ax"

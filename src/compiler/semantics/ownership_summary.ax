@@ -1,0 +1,25 @@
+// Phase 6: ownership summary hook — counts app .ax files (excludes .test.ax) for codegen contract.
+import
+    compiler/types/composites/string { string_len }
+    compiler/syntax/token { i64_to_string }
+    compiler/proj/discover {
+        project_entry_root,
+        list_all_ax_files,
+        string_concat,
+    }
+
+pub func build_ownership_summary_stub(root: String) String
+    r := axon_string_trim(root)
+    if string_len(r) == 0:
+        r = project_entry_root()
+    src := string_concat(r, "/src")
+    files := list_all_ax_files(src)
+    if axon_string_starts_with(files, "error:"):
+        return files
+    n := ownership_summary_file_count(files)
+    return string_concat("ok:ownership-summary:app-files=", i64_to_string(n))
+
+func ownership_summary_file_count(files: String) i64
+    if string_len(axon_string_trim(files)) == 0:
+        return 0
+    return axon_string_count(files, "\n") + 1

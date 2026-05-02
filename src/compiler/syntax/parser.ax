@@ -1,5 +1,11 @@
-// Axon-native parser. Structural analysis truth lives here.
-// The sidecar (parser.rs) handles file I/O; project checks use its string-aware balance.
+// Axon-native parser. All parsing logic lives here.
+// The sidecar (parser.rs) handles file I/O only.
+
+import
+    compiler/syntax/lexer { lex_all_tokens }
+    compiler/syntax/token {
+        TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_LBRACK, TOKEN_RBRACK, TOKEN_LBRACE, TOKEN_RBRACE
+    }
 
 // --- Existing helpers (preserved for tests) ---
 
@@ -12,6 +18,98 @@ pub func check_balance_simple(source: String) String
 
 pub func parse_balance_native(source: String) String
     return check_balance_simple(source)
+
+// --- Token stream delimiter contract (uses same lexer as lex stage) ---
+
+func parse_token_delim_scan_rec(tokens: String, pos: i64, paren: i64, brack: i64, brace: i64) String
+    kind := token_kind_at(tokens, pos)
+    if kind == "":
+        if paren == 0 and brack == 0 and brace == 0:
+            return "ok"
+        return "error: parse: unclosed delimiter in token stream"
+    if kind == TOKEN_LPAREN():
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren + 1, brack, brace)
+    if kind == TOKEN_RPAREN():
+        if paren <= 0:
+            return "error: parse: extra ')' in token stream"
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren - 1, brack, brace)
+    if kind == TOKEN_LBRACK():
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack + 1, brace)
+    if kind == TOKEN_RBRACK():
+        if brack <= 0:
+            return "error: parse: extra ']' in token stream"
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack - 1, brace)
+    if kind == TOKEN_LBRACE():
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack, brace + 1)
+    if kind == TOKEN_RBRACE():
+        if brace <= 0:
+            return "error: parse: extra '}' in token stream"
+        return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack, brace - 1)
+    return parse_token_delim_scan_rec(tokens, pos + 1, paren, brack, brace)
+
+pub func validate_token_stream_delimiters(tokens: String) String
+    t := axon_string_trim(tokens)
+    if t == "":
+        return "ok"
+    if axon_string_starts_with(t, "error|"):
+        return "error: lexer: bad token stream"
+    return parse_token_delim_scan_rec(tokens, 0, 0, 0, 0)
+
+// Character-aware delimiter scan (matches `parser.rs` describe_parse_impl; not naive counts).
+
+func delim_scan_rec(source: String, pos: i64, len: i64, in_string: bool, stack: String) String
+    if pos >= len:
+        if in_string:
+            return "error: unterminated string"
+        if axon_string_count(stack, "") > 0:
+            return "error: unclosed delimiter"
+        return "ok"
+    c := axon_string_char_at(source, pos)
+    if in_string:
+        if c == "\\":
+            next := pos + 2
+            if next > len:
+                return "error: unterminated string"
+            return delim_scan_rec(source, next, len, true, stack)
+        if c == "\"":
+            return delim_scan_rec(source, pos + 1, len, false, stack)
+        return delim_scan_rec(source, pos + 1, len, true, stack)
+    if c == "\"":
+        return delim_scan_rec(source, pos + 1, len, true, stack)
+    if c == "(":
+        return delim_scan_rec(source, pos + 1, len, false, stack + "(")
+    if c == "[":
+        return delim_scan_rec(source, pos + 1, len, false, stack + "[")
+    if c == "{":
+        return delim_scan_rec(source, pos + 1, len, false, stack + "{")
+    if c == ")":
+        sl := axon_string_count(stack, "")
+        if sl == 0 or axon_string_char_at(stack, sl - 1) != "(":
+            return "error: mismatched ')'"
+        return delim_scan_rec(source, pos + 1, len, false, axon_string_sub(stack, 0, sl - 1))
+    if c == "]":
+        sl := axon_string_count(stack, "")
+        if sl == 0 or axon_string_char_at(stack, sl - 1) != "[":
+            return "error: mismatched ']'"
+        return delim_scan_rec(source, pos + 1, len, false, axon_string_sub(stack, 0, sl - 1))
+    if c == "}":
+        sl := axon_string_count(stack, "")
+        if sl == 0 or axon_string_char_at(stack, sl - 1) != "{":
+            return "error: mismatched '}'"
+        return delim_scan_rec(source, pos + 1, len, false, axon_string_sub(stack, 0, sl - 1))
+    return delim_scan_rec(source, pos + 1, len, false, stack)
+
+pub func validate_delimiters_char_scan(source: String) String
+    if axon_string_trim(source) == "":
+        return "ok"
+    return delim_scan_rec(source, 0, axon_string_count(source, ""), false, "")
+
+pub func describe_parse_source(source: String) String
+    char_ok := validate_delimiters_char_scan(source)
+    if char_ok != "ok":
+        return char_ok
+    stream := lex_all_tokens(source)
+    return validate_token_stream_delimiters(stream)
 
 pub func count_function_declarations(source: String) i64
     total := axon_string_count(source, "func ")
@@ -225,27 +323,41 @@ func parse_type_from(tokens: String, pos: i64) String
             inner_end := find_matching_close(tokens, pos + 1, TOKEN_LT(), TOKEN_GT())
             if inner_end < 0:
                 return text
-            return text + "<" + parse_type_from(tokens, pos + 2) + ">"
+            inner := parse_type_from(tokens, pos + 2)
+            result := text + "<" + inner + ">"
+            // Check for postfix ! (errorable)
+            after_gt := inner_end + 1
+            if token_kind_at(tokens, after_gt) == TOKEN_BANG():
+                return result + "!"
+            return result
         if next == TOKEN_LBRACK():
             inner_end := find_matching_close(tokens, pos + 1, TOKEN_LBRACK(), TOKEN_RBRACK())
             if inner_end < 0:
                 return text + "[]"
             return text + "[]"
+        // Check for postfix ! (errorable): TypeName!
+        if next == TOKEN_BANG():
+            return text + "!"
         return text
     if kind == TOKEN_LPAREN():
         rparen := find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
         if rparen < 0:
             return ""
-        return "(" + collect_types_in_parens(tokens, pos + 1, rparen) + ")"
+        inner := "(" + collect_types_in_parens(tokens, pos + 1, rparen) + ")"
+        // Check for postfix ! after parenthesized type
+        after_rparen := rparen + 1
+        if token_kind_at(tokens, after_rparen) == TOKEN_BANG():
+            return inner + "!"
+        return inner
     if kind == TOKEN_QUESTION():
         inner := parse_type_from(tokens, pos + 1)
+        if inner == "":
+            return ""
+        // Check for ?T! (optional-errorable): ? followed by type that ends with !
         return "?" + inner
     if kind == TOKEN_STAR():
         inner := parse_type_from(tokens, pos + 1)
         return "*" + inner
-    if kind == TOKEN_BANG():
-        inner := parse_type_from(tokens, pos + 1)
-        return "!" + inner
     return ""
 
 func collect_types_in_parens(tokens: String, pos: i64, end: i64) String
@@ -285,6 +397,13 @@ func skip_type_tokens(tokens: String, pos: i64, limit: i64) i64
         comma := token_kind_at(tokens, pos + 1)
         if comma == TOKEN_COMMA():
             return pos + 2
+        // Check for postfix ! (errorable)
+        bang := token_kind_at(tokens, pos + 1)
+        if bang == TOKEN_BANG():
+            after_bang := token_kind_at(tokens, pos + 2)
+            if after_bang == TOKEN_COMMA():
+                return pos + 3
+            return pos + 2
         return pos + 1
     if kind == TOKEN_LPAREN():
         rparen := find_matching_close(tokens, pos, TOKEN_LPAREN(), TOKEN_RPAREN())
@@ -294,7 +413,7 @@ func skip_type_tokens(tokens: String, pos: i64, limit: i64) i64
         if comma == TOKEN_COMMA():
             return rparen + 2
         return rparen + 1
-    if kind == TOKEN_QUESTION() || kind == TOKEN_STAR() || kind == TOKEN_BANG():
+    if kind == TOKEN_QUESTION() || kind == TOKEN_STAR():
         inner := skip_type_tokens(tokens, pos + 1, limit)
         return inner
     return pos + 1
@@ -589,3 +708,10 @@ func validate_func_decl_from(tokens: String, offset: i64) String
         if after == TOKEN_INDENT():
             return "ok"
     return "ok"
+
+// --- Parse-check pipeline: Axon-side validation entry point ---
+// The file-walk pipeline (run_parse_check, parse_stage_failed) lives in parser.rs
+// as #[axon_pub_export] FFI because pipeline_check.ax imports them and the
+// codegen resolves them through the sidecar.
+// describe_parse_source (above) is the Axon-native validation truth that
+// matches the Rust-side parse_file_content character scan plus token validation.

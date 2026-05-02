@@ -1,0 +1,5 @@
+project typecheck_valid
+    version: "0.1.0"
+
+bin typecheck_valid
+    main: "./src/main.ax"

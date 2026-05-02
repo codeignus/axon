@@ -1,0 +1,6 @@
+import
+    compiler/semantics/typecheck { run_typecheck_project_path }
+
+test typecheck_project_empty_path_uses_root
+    got := run_typecheck_project_path("")
+    assert_eq(axon_string_starts_with(got, "ok:typecheck:project"), true)

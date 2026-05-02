@@ -1,0 +1,118 @@
+import
+    compiler/proj/build_file {
+        extract_project_name,
+        extract_binary_name,
+        extract_main_entry,
+        extract_version_field,
+        manifest_has_rust_deps,
+        manifest_has_go_deps,
+        manifest_has_python_deps,
+        manifest_has_deps,
+        extract_deps_body,
+        parse_deps_entries,
+        parse_rust_deps_body,
+        parse_go_deps_body,
+        parse_python_deps_body
+    }
+
+test build_extract_main_strip_double_quotes
+    m := "project x\n    version: \"0.1\"\n\nbin x\n    main: \"./src/main.ax\""
+    assert_eq(extract_main_entry(m), "./src/main.ax")
+
+test build_extract_version_strip_quotes
+    m := "project x\n    version: \"0.2\"\n\nbin x\n    main: ./src/main.ax"
+    assert_eq(extract_version_field(m), "0.2")
+
+test build_manifest_has_rust_deps
+    m := "project demo\nrust_deps\n    tokio = \"1\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_rust_deps(m), true)
+
+test build_manifest_no_rust_deps
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_rust_deps(m), false)
+
+test build_manifest_has_go_deps
+    m := "project demo\ngo_deps\n    rsc.io/quote = \"v1\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_go_deps(m), true)
+
+test build_manifest_has_python_deps
+    m := "project demo\npython_deps\n    requests = \"2\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_python_deps(m), true)
+
+test build_manifest_no_deps_keyword
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_deps(m), false)
+
+test build_manifest_has_deps_keyword
+    m := "project demo\ndeps\n    rust\n        tokio = \"1\"\nbin demo\n    main: ./src/main.ax"
+    assert_eq(manifest_has_deps(m), true)
+
+test build_extract_rust_deps_body
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\nrust_deps\n    tokio = \"1.0\"\n    serde = \"1.0\"\n"
+    body := extract_deps_body(m, "rust_deps")
+    assert_eq(string_contains(body, "tokio"), true)
+    assert_eq(string_contains(body, "serde"), true)
+
+test build_extract_go_deps_body
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\ngo_deps\n    rsc.io/quote = \"v1\"\n"
+    body := extract_deps_body(m, "go_deps")
+    assert_eq(string_contains(body, "rsc.io/quote"), true)
+
+test build_extract_deps_body_empty_when_missing
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    body := extract_deps_body(m, "rust_deps")
+    assert_eq(body, "")
+
+test build_hyphenated_project_name
+    m := "project lyla-backend\n    version: \"0.1.0\"\n\nbin lyla-backend\n    main: \"./src/main.ax\""
+    assert_eq(extract_project_name(m), "lyla-backend")
+    assert_eq(extract_binary_name(m), "lyla-backend")
+
+test build_hyphenated_project_with_rust_deps
+    m := "project lyla-backend\n    version: \"0.1.0\"\n\nbin lyla-backend\n    main: \"./src/main.ax\"\n\nrust_deps\n    tokio = \"1.0\"\n"
+    assert_eq(extract_project_name(m), "lyla-backend")
+    assert_eq(manifest_has_rust_deps(m), true)
+    body := extract_deps_body(m, "rust_deps")
+    assert_eq(string_contains(body, "tokio"), true)
+
+test build_parse_deps_entries_simple
+    body := "tokio = \"1.0\"\nserde = \"1.0\""
+    entries := parse_deps_entries(body)
+    assert_eq(string_contains(entries, "tokio:1.0"), true)
+    assert_eq(string_contains(entries, "serde:1.0"), true)
+
+test build_parse_deps_entries_with_braces
+    body := "clap = { version = \"4\", features = [\"derive\"] }"
+    entries := parse_deps_entries(body)
+    assert_eq(string_contains(entries, "clap:4"), true)
+
+test build_parse_deps_entries_mixed
+    body := "tracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"fmt\", \"env-filter\"] }\nclap = { version = \"4\", features = [\"derive\"] }"
+    entries := parse_deps_entries(body)
+    assert_eq(string_contains(entries, "tracing:0.1"), true)
+    assert_eq(string_contains(entries, "tracing-subscriber:0.3"), true)
+    assert_eq(string_contains(entries, "clap:4"), true)
+
+test build_parse_deps_entries_empty
+    assert_eq(parse_deps_entries(""), "")
+
+test build_parse_rust_deps_body_full
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\nrust_deps\n    tracing = \"0.1\"\n    clap = { version = \"4\", features = [\"derive\"] }\n"
+    entries := parse_rust_deps_body(m)
+    assert_eq(string_contains(entries, "tracing:0.1"), true)
+    assert_eq(string_contains(entries, "clap:4"), true)
+
+test build_parse_rust_deps_body_no_block
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax"
+    entries := parse_rust_deps_body(m)
+    assert_eq(entries, "")
+
+test build_parse_go_deps_body
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\ngo_deps\n    rsc.io/quote = \"v1\"\n"
+    entries := parse_go_deps_body(m)
+    assert_eq(string_contains(entries, "rsc.io/quote:v1"), true)
+
+test build_parse_python_deps_body
+    m := "project demo\n    version: \"0.1\"\n\nbin demo\n    main: ./src/main.ax\n\npython_deps\n    requests = \"2.31\"\n"
+    entries := parse_python_deps_body(m)
+    assert_eq(string_contains(entries, "requests:2.31"), true)

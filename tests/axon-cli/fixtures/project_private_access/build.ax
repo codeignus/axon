@@ -1,0 +1,5 @@
+project private_access
+    version: "0.1.0"
+
+bin private_access
+    main: "./src/main.ax"

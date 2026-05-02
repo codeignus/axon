@@ -1,0 +1,5 @@
+project bad_call
+    version: "0.1.0"
+
+bin bad_call
+    main: "./src/main.ax"

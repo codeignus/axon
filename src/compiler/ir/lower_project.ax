@@ -1,0 +1,75 @@
+// Phase 7: Axon-owned project lowering — builds MIR envelope JSON and writes lowered.ir (v3).
+import
+    compiler/types/composites/string { string_len }
+    compiler/syntax/token { i64_to_string }
+    compiler/proj/discover {
+        discover_project_root,
+        list_all_ax_files,
+        get_line_at,
+        read_source_file,
+        string_concat,
+        write_source_file,
+    }
+pub func lower_project(root: String) String
+    r := axon_string_trim(root)
+    if string_len(r) == 0:
+        r = discover_project_root()
+    src := string_concat(r, "/src")
+    files := list_all_ax_files(src)
+    if axon_string_starts_with(files, "error:"):
+        return files
+    if string_len(axon_string_trim(files)) == 0:
+        arr := "[]"
+        body := lower_project_build_ir(arr, 0)
+        wr := write_source_file("target/cache/lowered.ir", body)
+        if wr != "ok":
+            return wr
+        return "ok:lowered:v3:0"
+    total := axon_string_count(files, "\n") + 1
+    n := lower_project_count_nonempty(files, total, 0)
+    mod_json := lower_project_modules_json(files, total, 0, "")
+    arr := string_concat("[", string_concat(mod_json, "]"))
+    body := lower_project_build_ir(arr, n)
+    wr := write_source_file("target/cache/lowered.ir", body)
+    if wr != "ok":
+        return wr
+    return string_concat("ok:lowered:v3:", i64_to_string(n))
+
+func lower_project_count_nonempty(files: String, total: i64, idx: i64) i64
+    if idx >= total:
+        return 0
+    line := axon_string_trim(get_line_at(files, idx))
+    if string_len(line) == 0:
+        return lower_project_count_nonempty(files, total, idx + 1)
+    return 1 + lower_project_count_nonempty(files, total, idx + 1)
+
+func lower_project_modules_json(files: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    rel := axon_string_trim(get_line_at(files, idx))
+    if string_len(rel) == 0:
+        return lower_project_modules_json(files, total, idx + 1, acc)
+    entry := string_concat(string_concat("{\"path\":\"", json_escape_path(rel)), "\",\"mir\":\"axon-lower:ok\"}")
+    if string_len(acc) == 0:
+        return lower_project_modules_json(files, total, idx + 1, entry)
+    return lower_project_modules_json(files, total, idx + 1, string_concat(string_concat(acc, ","), entry))
+
+func json_escape_path(p: String) String
+    return json_escape_path_rec(p, 0, "")
+
+func json_escape_path_rec(p: String, pos: i64, acc: String) String
+    if pos >= string_len(p):
+        return acc
+    c := axon_string_char_at(p, pos)
+    if c == "\"":
+        return json_escape_path_rec(p, pos + 1, string_concat(acc, "\\\""))
+    if c == "\\":
+        return json_escape_path_rec(p, pos + 1, string_concat(acc, "\\\\"))
+    if c == "\n":
+        return json_escape_path_rec(p, pos + 1, string_concat(acc, "\\n"))
+    return json_escape_path_rec(p, pos + 1, string_concat(acc, c))
+
+func lower_project_build_ir(modules_json_array: String, n: i64) String
+    line1 := string_concat(string_concat("{\"v\":3,\"kind\":\"axon-lower-project-axon\",\"modules\":", modules_json_array), "}")
+    line2 := string_concat("; axon-lowered-modules=", i64_to_string(n))
+    return string_concat(string_concat(line1, "\n"), line2)

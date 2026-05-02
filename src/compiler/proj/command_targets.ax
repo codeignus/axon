@@ -29,4 +29,61 @@ pub func target_is_project_scope(target: String) bool
     return target == "" or target == "project"
 
 pub func target_is_file_scope(target: String) bool
-    return string_ends_with(target, ".ax") and axon_string_starts_with(target, "file:")
+    return string_ends_with(target, ".ax") && axon_string_starts_with(target, "file:")
+
+pub func validate_test_file_path(path: String) String
+    if axon_string_starts_with(path, "src/") && string_ends_with(path, ".test.ax"):
+        return "ok"
+    if axon_string_starts_with(path, "tests/") && string_ends_with(path, ".ax"):
+        return "ok"
+    return "error: not a valid test target (valid: src/**/*.test.ax, tests/**/*.ax)"
+
+pub func resolve_check_targets(scope: String) String
+    classified := resolve_check_target(scope)
+    if classified == "project":
+        return list_ax_files("src")
+    if axon_string_starts_with(classified, "file:"):
+        prefix_len := axon_string_count("file:", "")
+        return axon_string_sub(classified, prefix_len, axon_string_count(classified, "") - prefix_len)
+    if axon_string_starts_with(classified, "dir:"):
+        prefix_len := axon_string_count("dir:", "")
+        dir_path := axon_string_sub(classified, prefix_len, axon_string_count(classified, "") - prefix_len)
+        return list_ax_files(dir_path)
+    if axon_string_starts_with(classified, "dir-recursive:"):
+        prefix_len := axon_string_count("dir-recursive:", "")
+        dir_path := axon_string_sub(classified, prefix_len, axon_string_count(classified, "") - prefix_len)
+        return list_all_ax_files(dir_path)
+    return classified
+
+pub func resolve_test_targets(scope: String) String
+    classified := resolve_test_target(scope)
+    if classified == "test:project":
+        return list_test_files(".")
+    if axon_string_starts_with(classified, "file:"):
+        prefix_len := axon_string_count("file:", "")
+        return axon_string_sub(classified, prefix_len, axon_string_count(classified, "") - prefix_len)
+    if axon_string_starts_with(classified, "dir:"):
+        prefix_len := axon_string_count("dir:", "")
+        dir_path := axon_string_sub(classified, prefix_len, axon_string_count(classified, "") - prefix_len)
+        return list_test_files(dir_path)
+    if axon_string_starts_with(classified, "dir-recursive:"):
+        prefix_len := axon_string_count("dir-recursive:", "")
+        dir_path := axon_string_sub(classified, prefix_len, axon_string_count(classified, "") - prefix_len)
+        return list_test_files(dir_path)
+    return classified
+
+pub func validate_target_in_project(target: String, project_root: String) String
+    if target == "" || target == "project":
+        manifest := read_source_file(string_concat(project_root, "/build.ax"))
+        if axon_string_starts_with(manifest, "error:"):
+            return string_concat("error: no build.ax in project root: ", project_root)
+        return "ok"
+    if string_ends_with(target, ".ax"):
+        full := string_concat(string_concat(project_root, "/"), target)
+        if path_exists(full):
+            return "ok"
+        return string_concat("error: file not found: ", target)
+    full_dir := string_concat(string_concat(project_root, "/"), target)
+    if path_is_dir(full_dir):
+        return "ok"
+    return string_concat("error: target not found: ", target)

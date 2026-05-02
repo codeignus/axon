@@ -1,0 +1,101 @@
+// Phase 5 will extend this module (unused locals, unreachable code, etc.).
+import
+    compiler/types/composites/string { string_len }
+
+pub func run_axon_lints(source: String) String
+    if string_len(axon_string_trim(source)) == 0:
+        return "ok:lint:empty"
+    unreachable := check_unreachable_after_return_axon(source)
+    if string_len(unreachable) > 0:
+        return unreachable
+    return "ok:lint"
+
+func lint_count_lines(source: String) i64
+    if string_len(source) == 0:
+        return 0
+    return lint_count_lines_rec(source, 0, 1)
+
+func lint_count_lines_rec(source: String, pos: i64, count: i64) i64
+    if pos >= string_len(source):
+        return count
+    if axon_string_char_at(source, pos) == "\n":
+        return lint_count_lines_rec(source, pos + 1, count + 1)
+    return lint_count_lines_rec(source, pos + 1, count)
+
+func lint_get_line(source: String, line_num: i64) String
+    return lint_get_line_rec(source, line_num, 0, 0)
+
+func lint_get_line_rec(source: String, line_num: i64, current: i64, start: i64) String
+    return lint_get_line_scan(source, line_num, current, start, start)
+
+func lint_get_line_scan(source: String, line_num: i64, current: i64, start: i64, pos: i64) String
+    if pos >= string_len(source):
+        if current == line_num:
+            return axon_string_sub(source, start, string_len(source) - start)
+        return ""
+    c := axon_string_char_at(source, pos)
+    if current == line_num:
+        if c == "\n":
+            return axon_string_sub(source, start, pos - start)
+        return lint_get_line_scan(source, line_num, current, start, pos + 1)
+    if c == "\n":
+        return lint_get_line_scan(source, line_num, current + 1, pos + 1, pos + 1)
+    return lint_get_line_scan(source, line_num, current, start, pos + 1)
+
+func lint_line_is_return(trimmed: String) bool
+    if axon_string_starts_with(trimmed, "return "):
+        return true
+    if trimmed == "return":
+        return true
+    return false
+
+func lint_line_skipped_after_return(trimmed: String) bool
+    if string_len(trimmed) == 0:
+        return true
+    if axon_string_starts_with(trimmed, "//"):
+        return true
+    if axon_string_starts_with(trimmed, "func "):
+        return true
+    if axon_string_starts_with(trimmed, "pub func "):
+        return true
+    if axon_string_starts_with(trimmed, "import"):
+        return true
+    if axon_string_starts_with(trimmed, "struct "):
+        return true
+    if axon_string_starts_with(trimmed, "pub struct "):
+        return true
+    if axon_string_starts_with(trimmed, "enum "):
+        return true
+    if axon_string_starts_with(trimmed, "trait "):
+        return true
+    if axon_string_starts_with(trimmed, "impl "):
+        return true
+    if axon_string_starts_with(trimmed, "test "):
+        return true
+    return false
+
+func lint_next_meaningful_line(source: String, total: i64, start_idx: i64) String
+    return lint_next_meaningful_rec(source, total, start_idx)
+
+func lint_next_meaningful_rec(source: String, total: i64, idx: i64) String
+    if idx >= total:
+        return ""
+    line := axon_string_trim(lint_get_line(source, idx))
+    if lint_line_skipped_after_return(line):
+        return lint_next_meaningful_rec(source, total, idx + 1)
+    return line
+
+pub func check_unreachable_after_return_axon(source: String) String
+    total := lint_count_lines(source)
+    return lint_scan_returns(source, total, 0)
+
+func lint_scan_returns(source: String, total: i64, idx: i64) String
+    if idx >= total:
+        return ""
+    trimmed := axon_string_trim(lint_get_line(source, idx))
+    if lint_line_is_return(trimmed):
+        next := lint_next_meaningful_line(source, total, idx + 1)
+        if string_len(next) > 0:
+            return "error:lint:unreachable-code-after-return"
+    return lint_scan_returns(source, total, idx + 1)
+

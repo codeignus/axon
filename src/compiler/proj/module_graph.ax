@@ -1,12 +1,136 @@
 pub func list_compiler_modules() String
-    return "compiler/entry,compiler/pipeline_check,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/complex_types/string,compiler/complex_types/array,compiler/ir/ir,compiler/ir/lower,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge"
+    return "compiler/entry,compiler/pipeline_check,compiler/pipeline_check/test_orchestrate,compiler/diagnostics/diagnostic,compiler/proj/build_file,compiler/proj/module_graph,compiler/proj/discover,compiler/proj/targets,compiler/types/composites/string,compiler/types/composites/array,compiler/ir/ir,compiler/ir/lower,compiler/ir/lower_project,compiler/backend/artifacts,compiler/backend/link,compiler/backend/ffi,compiler/backend/native_codegen,compiler/backend/foreign_archive,compiler/bootstrap/protocol,compiler/bootstrap/rust_bridge"
 
 pub func build_module_graph(root: String) String
-    files := list_ax_files(string_concat(root, "/src"))
+    files := list_all_ax_files(string_concat(root, "/src"))
     if axon_string_starts_with(files, "error:"):
         return files
     total := axon_string_count(files, "\n") + 1
     return extract_module_paths(files, total, 0, "")
+
+pub func build_full_module_graph(root: String) String
+    manifest := read_source_file(string_concat(root, "/build.ax"))
+    if axon_string_starts_with(manifest, "error:"):
+        return manifest
+    project_name := extract_project_name(manifest)
+    app_files_raw := list_all_ax_files(string_concat(root, "/src"))
+    if axon_string_starts_with(app_files_raw, "error:"):
+        return app_files_raw
+    test_files_raw := list_test_files(root)
+    sidecar_files_raw := list_sidecar_files(root)
+    header := string_concat("graph:", project_name)
+    app_total := axon_string_count(app_files_raw, "\n") + 1
+    modules := build_module_entries(app_files_raw, app_total, 0, "")
+    entries := string_concat(string_concat(string_concat(string_concat(header, "\nmodules:"), modules), "\ntest_files:"), test_files_raw)
+    return string_concat(string_concat(entries, "\nsidecars:"), sidecar_files_raw)
+
+func build_module_entries(files: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_graph_line(files, idx))
+    if axon_string_count(line, "") == 0:
+        return build_module_entries(files, total, idx + 1, acc)
+    mod_path := strip_src_prefix_and_ext(line)
+    if axon_string_count(mod_path, "") == 0:
+        return build_module_entries(files, total, idx + 1, acc)
+    entry := build_single_module_entry(line, mod_path)
+    if axon_string_count(acc, "") == 0:
+        return build_module_entries(files, total, idx + 1, entry)
+    return build_module_entries(files, total, idx + 1, string_concat(string_concat(acc, "\n"), entry))
+
+func build_single_module_entry(file_path: String, mod_path: String) String
+    content := read_source_file(file_path)
+    symbols := scan_top_level_symbols(content)
+    return string_concat(string_concat(string_concat(string_concat("mod:", mod_path), " src:"), file_path), string_concat(" exports:", symbols))
+
+pub func list_module_top_level(module_path: String) String
+    file_path := import_path_to_file_path(module_path)
+    if file_path == "not-found":
+        return ""
+    if axon_string_starts_with(file_path, "dir:"):
+        return list_dir_module_top_level(file_path, module_path)
+    content := read_source_file(file_path)
+    return scan_top_level_symbols(content)
+
+func list_dir_module_top_level(dir_marker: String, mod_path: String) String
+    dir_len := axon_string_count("dir:", "")
+    dir_path := axon_string_sub(dir_marker, dir_len, axon_string_count(dir_marker, "") - dir_len)
+    files := list_ax_files(dir_path)
+    if axon_string_starts_with(files, "error:"):
+        return ""
+    total := axon_string_count(files, "\n") + 1
+    return scan_dir_files_exports(files, total, 0, "")
+
+func scan_dir_files_exports(files: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_graph_line(files, idx))
+    if axon_string_count(line, "") == 0:
+        return scan_dir_files_exports(files, total, idx + 1, acc)
+    content := read_source_file(line)
+    symbols := scan_top_level_symbols(content)
+    if axon_string_count(symbols, "") == 0:
+        return scan_dir_files_exports(files, total, idx + 1, acc)
+    if axon_string_count(acc, "") == 0:
+        return scan_dir_files_exports(files, total, idx + 1, symbols)
+    return scan_dir_files_exports(files, total, idx + 1, string_concat(string_concat(acc, ","), symbols))
+
+func scan_top_level_symbols(source: String) String
+    total := axon_string_count(source, "\n") + 1
+    return scan_lines_for_symbols(source, total, 0, "")
+
+func scan_lines_for_symbols(source: String, total: i64, idx: i64, acc: String) String
+    if idx >= total:
+        return acc
+    line := axon_string_trim(get_graph_line(source, idx))
+    name := try_extract_symbol_name(line)
+    if axon_string_count(name, "") == 0:
+        return scan_lines_for_symbols(source, total, idx + 1, acc)
+    if axon_string_count(acc, "") == 0:
+        return scan_lines_for_symbols(source, total, idx + 1, name)
+    return scan_lines_for_symbols(source, total, idx + 1, string_concat(string_concat(acc, ","), name))
+
+func try_extract_symbol_name(line: String) String
+    if axon_string_starts_with(line, "pub func "):
+        return extract_name_after(line, "pub func ")
+    if axon_string_starts_with(line, "func "):
+        return extract_name_after(line, "func ")
+    if axon_string_starts_with(line, "pub struct "):
+        return extract_name_after(line, "pub struct ")
+    if axon_string_starts_with(line, "struct "):
+        return extract_name_after(line, "struct ")
+    if axon_string_starts_with(line, "pub enum "):
+        return extract_name_after(line, "pub enum ")
+    if axon_string_starts_with(line, "enum "):
+        return extract_name_after(line, "enum ")
+    if axon_string_starts_with(line, "pub type "):
+        return extract_name_after(line, "pub type ")
+    if axon_string_starts_with(line, "type "):
+        return extract_name_after(line, "type ")
+    if axon_string_starts_with(line, "pub trait "):
+        return extract_name_after(line, "pub trait ")
+    if axon_string_starts_with(line, "trait "):
+        return extract_name_after(line, "trait ")
+    if axon_string_starts_with(line, "pub error "):
+        return extract_name_after(line, "pub error ")
+    if axon_string_starts_with(line, "error "):
+        return extract_name_after(line, "error ")
+    if axon_string_starts_with(line, "test "):
+        return extract_name_after(line, "test ")
+    return ""
+
+func extract_name_after(line: String, prefix: String) String
+    prefix_len := axon_string_count(prefix, "")
+    rest := axon_string_sub(line, prefix_len, axon_string_count(line, "") - prefix_len)
+    return extract_word(rest, 0)
+
+func extract_word(s: String, pos: i64) String
+    if pos >= axon_string_count(s, ""):
+        return s
+    ch := axon_string_char_at(s, pos)
+    if ch == "(" || ch == " " || ch == ":" || ch == "<" || ch == "{":
+        return axon_string_sub(s, 0, pos)
+    return extract_word(s, pos + 1)
 
 func extract_module_paths(files: String, total: i64, idx: i64, acc: String) String
     if idx >= total:
