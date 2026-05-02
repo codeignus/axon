@@ -140,8 +140,9 @@ fn run_lowered_to_artifact(lowered: &str) -> String {
     let marker = marker_dir.join("build-manifest.txt");
     let proj = parse_project_name_from_build_ax().unwrap_or_else(|| "axon".into());
     let native = root.join("target/build").join(&proj).join(&proj);
+    let axon_lower = lowered.starts_with("ok:lowered:v3:");
     let manifest_txt = format!(
-        "artifact\nstage=migration-native-build\nmigration-driver={}\nsource-native={}\nproject={}\nlowered-envelope={}\n",
+        "artifact\nstage=migration-native-build\naxon_lower_project={axon_lower}\nmigration-driver={}\nsource-native={}\nproject={}\nlowered-envelope={}\n",
         driver.display(),
         native.display(),
         proj,

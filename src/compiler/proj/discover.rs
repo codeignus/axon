@@ -144,6 +144,21 @@ fn read_source_file(path: &str) -> String {
     }
 }
 
+/// FFI: Writes UTF-8 text to `path`, creating parent directories. Returns `ok` or `error:...`.
+#[axon_export]
+fn write_source_file(path: &str, content: &str) -> String {
+    let p = std::path::Path::new(path);
+    if let Some(parent) = p.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return format!("error: discover: cannot create parent for {path}: {e}");
+        }
+    }
+    match std::fs::write(p, content.as_bytes()) {
+        Ok(()) => "ok".to_string(),
+        Err(e) => format!("error: discover: cannot write {path}: {e}"),
+    }
+}
+
 /// FFI: Returns the character at byte-offset `index` in `s`.
 /// Returns empty string if out of bounds.
 #[axon_export]

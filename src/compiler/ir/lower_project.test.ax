@@ -1,0 +1,6 @@
+import
+    compiler/ir/lower_project { lower_project }
+
+test lower_project_returns_v3_envelope
+    got := lower_project("")
+    assert_eq(axon_string_starts_with(got, "ok:lowered:v3:"), true)

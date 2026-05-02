@@ -1,0 +1,45 @@
+// Phase 9: Axon-owned test orchestration — semantic check per discovered test file (colocated + integration).
+import
+    compiler/types/composites/string { string_len }
+    compiler/syntax/token { i64_to_string }
+    compiler/proj/discover {
+        discover_project_root,
+        discover_all_test_files,
+        get_line_at,
+        read_source_file,
+        string_concat,
+    }
+    compiler/semantics/check { run_full_semantic_check }
+
+pub func run_tests_axon_orchestrated(target: String) String
+    root := discover_project_root()
+    t := axon_string_trim(target)
+    if string_len(t) > 0:
+        content := read_source_file(t)
+        if axon_string_starts_with(content, "error:"):
+            return string_concat("error:test: cannot read target ", t)
+        chk := run_full_semantic_check(content)
+        if axon_string_starts_with(chk, "error"):
+            return string_concat(string_concat(chk, " in "), t)
+        return string_concat("ok:test:1 file ", t)
+    files := discover_all_test_files(root)
+    if axon_string_starts_with(files, "error:"):
+        return files
+    if string_len(axon_string_trim(files)) == 0:
+        return "ok:test:0-files"
+    total := axon_string_count(files, "\n") + 1
+    return test_orchestrate_scan(files, total, 0, 0)
+
+func test_orchestrate_scan(files: String, total: i64, idx: i64, passed: i64) String
+    if idx >= total:
+        return string_concat("ok:test:axon-orchestrated:", i64_to_string(passed))
+    rel := axon_string_trim(get_line_at(files, idx))
+    if string_len(rel) == 0:
+        return test_orchestrate_scan(files, total, idx + 1, passed)
+    content := read_source_file(rel)
+    if axon_string_starts_with(content, "error:"):
+        return string_concat(string_concat("error:test: cannot read ", rel), "")
+    chk := run_full_semantic_check(content)
+    if axon_string_starts_with(chk, "error"):
+        return string_concat(string_concat(string_concat(chk, " in "), rel), "")
+    return test_orchestrate_scan(files, total, idx + 1, passed + 1)

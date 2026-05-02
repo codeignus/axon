@@ -3,7 +3,8 @@ import
     compiler/diagnostics/diagnostics { diag_error, stage_should_abort }
     compiler/ir { lower_project }
     compiler/pipeline_check { run_check_for_path, run_fmt_target, validate_project_structure }
-    compiler/proj { discover_project_root, discover_source_files, describe_project, parse_build_manifest, build_module_graph, resolve_build_target_path }
+    compiler/pipeline_check/test_orchestrate { run_tests_axon_orchestrated }
+    compiler/proj { discover_project_root, discover_source_files, describe_project, parse_build_manifest, build_module_graph, resolve_build_target_path, string_concat }
 
 pub func check(path: String) String
     return run_check_for_path(path)
@@ -39,7 +40,13 @@ pub func run_tests(target: String) String
     pre := run_check_for_path("")
     if stage_should_abort(pre):
         return pre
-    return run_compiler_tests_native(target)
+    axon_tests := run_tests_axon_orchestrated(target)
+    if axon_string_starts_with(axon_tests, "error"):
+        return axon_tests
+    native := run_compiler_tests_native(target)
+    if axon_string_starts_with(native, "error"):
+        return native
+    return string_concat(string_concat(axon_tests, " | "), native)
 
 pub func run_fmt(target: String) String
     return run_fmt_target(target)
